@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "llm-kit"
 version = "0.1.0"
@@ -36,6 +40,9 @@ test = [
 dev = [
     "ruff",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["llm_kit"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
