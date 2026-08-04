@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "llm-kit"
+name = "lector"
 version = "0.1.0"
-description = "Reusable LLM pipeline toolkit: Jinja2 prompt composition, backend-agnostic inference (local llama.cpp/vLLM or hosted via OpenRouter), and a resumable task-processing loop with wandb logging."
+description = "Personal lecture generator: topic -> Obsidian-grounded content -> narrated audio. Built on the vendored llm_kit toolkit (llm_kit/README.md)."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
@@ -13,6 +13,7 @@ dependencies = [
     "pydantic",
     "jinja2",
     "pandas",
+    "pyyaml",
 ]
 
 [project.optional-dependencies]
@@ -42,7 +43,7 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["llm_kit"]
+packages = ["llm_kit", "lector"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

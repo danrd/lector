@@ -1738,6 +1738,62 @@ wheels = [
 ]
 
 [[package]]
+name = "lector"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "jinja2" },
+    { name = "pandas" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+
+[package.optional-dependencies]
+hf = [
+    { name = "torch" },
+    { name = "transformers" },
+]
+llama-cpp = [
+    { name = "llama-cpp-python", extra = ["server"] },
+]
+logging = [
+    { name = "wandb" },
+]
+openrouter = [
+    { name = "openai" },
+]
+test = [
+    { name = "pytest" },
+]
+vllm = [
+    { name = "vllm" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "jinja2" },
+    { name = "llama-cpp-python", extras = ["server"], marker = "extra == 'llama-cpp'" },
+    { name = "openai", marker = "extra == 'openrouter'" },
+    { name = "pandas" },
+    { name = "pydantic" },
+    { name = "pytest", marker = "extra == 'test'" },
+    { name = "pyyaml" },
+    { name = "torch", marker = "extra == 'hf'" },
+    { name = "transformers", marker = "extra == 'hf'" },
+    { name = "vllm", marker = "extra == 'vllm'", specifier = ">=0.6" },
+    { name = "wandb", marker = "extra == 'logging'" },
+]
+provides-extras = ["llama-cpp", "vllm", "openrouter", "hf", "logging", "test"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "ruff" }]
+
+[[package]]
 name = "llama-cpp-python"
 version = "0.3.34"
 source = { registry = "https://pypi.org/simple" }
@@ -1778,60 +1834,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/47/e6/6b61cecced5233739bc85e463d68d67d4b4c29fb6f91bd12e6b6a65647e3/llguidance-1.7.6-cp39-abi3-manylinux_2_39_riscv64.whl", hash = "sha256:e9f68206e0f3f89aceabb90aa1f8ed570db22fb7cb1fd9ebf96fa7727a65af55", size = 3603845, upload-time = "2026-06-03T20:13:19.473Z" },
     { url = "https://files.pythonhosted.org/packages/49/37/99d700f0e2c83acf25a8d8946b2bee9f5eac47bc530bfbd53ba3126c667f/llguidance-1.7.6-cp39-abi3-win_amd64.whl", hash = "sha256:ace7e81cd31950a87186356ab24bd7f75fbc10a05ca9d9f7f8748f931963f763", size = 2879207, upload-time = "2026-06-03T20:13:23.341Z" },
 ]
-
-[[package]]
-name = "llm-kit"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "jinja2" },
-    { name = "pandas" },
-    { name = "pydantic" },
-]
-
-[package.optional-dependencies]
-hf = [
-    { name = "torch" },
-    { name = "transformers" },
-]
-llama-cpp = [
-    { name = "llama-cpp-python", extra = ["server"] },
-]
-logging = [
-    { name = "wandb" },
-]
-openrouter = [
-    { name = "openai" },
-]
-test = [
-    { name = "pytest" },
-]
-vllm = [
-    { name = "vllm" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "jinja2" },
-    { name = "llama-cpp-python", extras = ["server"], marker = "extra == 'llama-cpp'" },
-    { name = "openai", marker = "extra == 'openrouter'" },
-    { name = "pandas" },
-    { name = "pydantic" },
-    { name = "pytest", marker = "extra == 'test'" },
-    { name = "torch", marker = "extra == 'hf'" },
-    { name = "transformers", marker = "extra == 'hf'" },
-    { name = "vllm", marker = "extra == 'vllm'", specifier = ">=0.6" },
-    { name = "wandb", marker = "extra == 'logging'" },
-]
-provides-extras = ["llama-cpp", "vllm", "openrouter", "hf", "logging", "test"]
-
-[package.metadata.requires-dev]
-dev = [{ name = "ruff" }]
 
 [[package]]
 name = "llvmlite"

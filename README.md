@@ -1,72 +1,44 @@
-# llm_kit
+# lector
 
-Reusable LLM pipeline toolkit, extracted from the `subsymbolic/` module of
-the ARC-AGI project. Three independent pieces, meant to be used together
-or separately:
+Personal lecture generator: give it a topic, it pulls whatever's relevant
+from your Obsidian vault (if anything - see below), turns that into a
+structured, serious lecture (not a podcast), and narrates it. Output:
+audio (optionally uploaded to YouTube with a static/slide image, e.g. for
+formulas).
 
-- **`prompt_builder.py`** — `PromptBuilder`/`PromptingConfig`: compose a
-  prompt from ordered Jinja2 "blocks" (`<name>/<version>.j2` template
-  files), token-budgeted and joined as XML/Markdown/plain text or via
-  `tokenizer.apply_chat_template`. Project-specific `resolvers`/`filters`
-  are injected via constructor params (`resolver_registry`/
-  `filter_registry`), not hardcoded — this module has zero project-specific
-  imports.
-- **`llm_runtime.py` + `llm_setup.py`** — `GenerationConfig` and a family
-  of `Runner` classes (`ServerRunner`, `LlamaCppRunner`, `VLLMRunner`,
-  `HFRunner`, `OpenRouterRunner`) behind one interface:
-  `runner.generate(prompt: str) -> str`. `llm_setup.build_runner(config)`
-  picks a local backend with a fallback chain:
-  ```
-  CPU:  llama.cpp server -> llama.cpp in-process
-  GPU:  vLLM server -> vLLM in-process -> HF in-process (4-bit)
-  ```
-  Hosted models (OpenRouter, in principle OpenAI/Anthropic/Gemini) are a
-  separate, explicit path (`OpenRouterRunner`) - never inferred from
-  config. Heavy dependencies (torch, transformers, llama_cpp, vllm, openai)
-  are imported lazily, so importing this module never requires every
-  backend's library installed.
-- **`llm_run.py` + `logging.py`** — `run_llm_over_tasks(...)`: a generic,
-  resumable loop over `(task_id, task)` pairs - build a prompt, generate,
-  score with a pluggable `evaluator(task, generated_text) -> EvalResult`,
-  log + checkpoint to wandb as it goes. Safe to interrupt and re-run with
-  the same `run_id` - already-processed tasks are skipped.
+Status: early. Built on [`llm_kit`](llm_kit/README.md) (vendored here, not
+a separate dependency yet - see that file for what it provides: prompt
+composition, backend-agnostic LLM inference, a resumable task-processing
+loop).
 
-## Install
+## Pieces
 
-```bash
-uv add llm-kit                    # base: PromptBuilder + llm_run's loop
-uv add "llm-kit[llama-cpp]"       # + local CPU inference
-uv add "llm-kit[vllm]"            # + local GPU inference
-uv add "llm-kit[openrouter]"      # + hosted models via OpenRouter
-uv add "llm-kit[logging]"         # + wandb logging (run_llm_over_tasks needs this)
-```
+- **`lector/knowledge_base.py`** — keyword retrieval over a local Obsidian
+  vault. Given a topic, scores every note by title/tag/body overlap and
+  returns the ones that clear a relevance bar - capped at `top_k`, but
+  **empty when nothing does**. This is deliberate, not a fallback: a
+  personal vault is sparse by nature, and "no notes on this topic" has to
+  be a normal, common result, not something the retrieval papers over by
+  returning the "best" of a bunch of irrelevant notes. Wired into
+  `llm_kit.prompt_builder.PromptBuilder` as a resolver via
+  `make_knowledge_base_resolver(notes)` - when it finds nothing, the
+  resolver returns `""` (not `None`), so building the rest of the prompt
+  still proceeds normally without vault content.
+- **Content generation, verification, narration-script writing** - not
+  built yet. Planned as a small pipeline of roles (structure the lecture,
+  write it, fact-check it - formulas especially, rewrite for speech) on
+  top of `llm_kit`'s prompt/inference/loop pieces.
+- **TTS + audio/video assembly** - not built yet; lower priority for now,
+  most of the near-term work is on getting the content pipeline right.
 
-## Minimal usage
-
-```python
-from llm_kit.prompt_builder import PromptBuilder, PromptingConfig
-from llm_kit.llm_setup import LlmConfig, build_runner
-from llm_kit.llm_run import EvalResult, run_llm_over_tasks
-
-config = PromptingConfig(blocks_dir="prompts/", blocks=["instructions", "task"])
-builder = PromptBuilder(config, tokenizer, resolver_registry={}, filter_registry={})
-
-class LlmModule:
-    def __init__(self, builder, runner):
-        self.builder = builder
-        self.runner = runner
-
-runner = build_runner(experiment_config)  # config.base: LlmConfig, config.generation: GenerationConfig
-module = LlmModule(builder, runner)
-
-def my_evaluator(task, generated_text) -> EvalResult:
-    ...
-
-run_llm_over_tasks(tasks=[...], llm_module=module, evaluator=my_evaluator)
-```
-
-## Tests
+## Setup
 
 ```bash
+uv sync --extra test
+cp .env.example .env   # fill in OPENROUTER_API_KEY / WANDB_API_KEY as needed
 uv run pytest
 ```
+
+## License
+
+MIT
