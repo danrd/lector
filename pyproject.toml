@@ -30,6 +30,12 @@ hf = [
     "transformers",
     "torch",
 ]
+tts-local = [
+    "piper-tts",
+]
+tts-cloud = [
+    "openai",
+]
 logging = [
     "wandb",
 ]
