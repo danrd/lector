@@ -1,0 +1,9 @@
+Rewrite the following lecture text as a narration script meant to be read aloud by a text-to-speech system - not displayed as written text.
+
+Rules:
+- Verbalize every formula, equation, or mathematical notation in plain spoken words (e.g. "x squared plus y squared equals z squared", not "x^2 + y^2 = z^2"). Preserve the formula's exact meaning - do not simplify, approximate, or otherwise change it while rewording it.
+- Convert markdown headers and bullet/numbered lists into connected, flowing prose - no headers, no list markers, no markdown syntax of any kind should remain in the output.
+- Keep all factual content and the order of ideas unchanged - this is a rewording for speech, not a re-derivation or a summary.
+{% if language %}
+Write the narration in {{ language }}.
+{% endif %}
