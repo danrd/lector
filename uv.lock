@@ -1779,6 +1779,11 @@ tts-cloud = [
 tts-local = [
     { name = "piper-tts" },
 ]
+tts-orpheus = [
+    { name = "llama-cpp-python", extra = ["server"] },
+    { name = "snac" },
+    { name = "torch" },
+]
 vllm = [
     { name = "vllm" },
 ]
@@ -1792,6 +1797,7 @@ dev = [
 requires-dist = [
     { name = "jinja2" },
     { name = "llama-cpp-python", extras = ["server"], marker = "extra == 'llama-cpp'" },
+    { name = "llama-cpp-python", extras = ["server"], marker = "extra == 'tts-orpheus'" },
     { name = "openai", marker = "extra == 'openrouter'" },
     { name = "openai", marker = "extra == 'tts-cloud'" },
     { name = "pandas" },
@@ -1799,12 +1805,14 @@ requires-dist = [
     { name = "pydantic" },
     { name = "pytest", marker = "extra == 'test'" },
     { name = "pyyaml" },
+    { name = "snac", marker = "extra == 'tts-orpheus'" },
     { name = "torch", marker = "extra == 'hf'" },
+    { name = "torch", marker = "extra == 'tts-orpheus'" },
     { name = "transformers", marker = "extra == 'hf'" },
     { name = "vllm", marker = "extra == 'vllm'", specifier = ">=0.6" },
     { name = "wandb", marker = "extra == 'logging'" },
 ]
-provides-extras = ["llama-cpp", "vllm", "openrouter", "hf", "tts-local", "tts-cloud", "logging", "test"]
+provides-extras = ["llama-cpp", "vllm", "openrouter", "hf", "tts-local", "tts-cloud", "tts-orpheus", "logging", "test"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "ruff" }]
@@ -4799,6 +4807,22 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
+]
+
+[[package]]
+name = "snac"
+version = "1.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "einops" },
+    { name = "huggingface-hub" },
+    { name = "numpy", version = "2.3.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
+    { name = "torch" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/43/38/5b64fb15c1cf02233252975c43c4b85ccacd9f77c55f7fee72b16b3bd2f6/snac-1.2.1.tar.gz", hash = "sha256:697f27fc5b98308eee8946739e5fd9c1b4ec629ef51b4f01c08dace1290685ee", size = 8737, upload-time = "2024-09-11T15:00:46.175Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/79/4f/6401dc74af3d9e9602209763eccbb7eac739c2501e499b51b560f71443c0/snac-1.2.1-py3-none-any.whl", hash = "sha256:96f90e221121ad03d6e3b060a787268b1efdbe424560a58f6f732df6d4914dc7", size = 8444, upload-time = "2024-09-11T15:00:44.906Z" },
 ]
 
 [[package]]

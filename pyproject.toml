@@ -36,6 +36,11 @@ tts-local = [
 tts-cloud = [
     "openai",
 ]
+tts-orpheus = [
+    "llama-cpp-python[server]",
+    "snac",
+    "torch",
+]
 logging = [
     "wandb",
 ]
