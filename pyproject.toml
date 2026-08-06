@@ -29,6 +29,9 @@ openrouter = [
 hf = [
     "transformers",
     "torch",
+    # Many HF tokenizers (Llama/Qwen family included) are SentencePiece-based;
+    # AutoTokenizer.from_pretrained() needs this installed to convert them.
+    "sentencepiece",
 ]
 tts-local = [
     "piper-tts",
