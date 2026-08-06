@@ -49,6 +49,15 @@ class LlmConfig(BaseModel):
     device: str = 'cpu'
     framework: str = 'llama_cpp'  # llama_cpp | vllm | hf
     model: str = 'unsloth/Qwen3.6-27B-GGUF'
+    # A GGUF repo (the default above) embeds its own tokenizer for
+    # llama.cpp's use, but has none of the files transformers.AutoTokenizer
+    # needs - trying to load one from `model` directly fails with
+    # "Couldn't instantiate the backend tokenizer...". Set this to the
+    # equivalent plain HF repo when you need a real tokenizer (e.g. for
+    # PromptBuilder's token counting); callers should use
+    # `tokenizer_model or model`. None when `model` is already a plain HF
+    # repo and doubles fine as its own tokenizer source.
+    tokenizer_model: Optional[str] = None
     quant_file: str = 'Qwen3.6-27B-Q4_K_M.gguf'
     max_context: int = 9000  # llm token limit for computational resources to control
     openrouter_models: List[str] = ["google/gemma-4-26b-a4b-it",
