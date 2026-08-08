@@ -59,6 +59,8 @@ class LlmConfig(BaseModel):
     # repo and doubles fine as its own tokenizer source.
     tokenizer_model: Optional[str] = None
     quant_file: str = 'Qwen3.6-27B-Q4_K_M.gguf'
+    # Where quant_file GGUFs live once downloaded - see resolve_local_model_path().
+    pretrained_models_dir: str = '/data/pretrained_models'
     max_context: int = 9000  # llm token limit for computational resources to control
     openrouter_models: List[str] = ["google/gemma-4-26b-a4b-it",
                                     "nvidia/nemotron-3-ultra-550b-a55b"]
@@ -87,6 +89,29 @@ def _wait_for_server_ready(process: subprocess.Popen, port: int,
     return False
 
 
+def resolve_local_model_path(config) -> str:
+    """Resolve config.base.model into a real local file llama.cpp can load.
+    A GGUF-only repo id (e.g. 'unsloth/Qwen3.6-27B-GGUF') is not itself a
+    loadable path - the weights are one file within that repo, named by
+    quant_file, and need to be downloaded first. Uses huggingface_hub
+    directly (the same caching/resume logic as the `hf download` CLI, but
+    idempotent in-process - a no-op if the file is already present) rather
+    than shelling out. If `model` already names an existing local file
+    (e.g. a test fixture pointing straight at a tiny GGUF) it's returned
+    as-is - quant_file is irrelevant to that case. When quant_file isn't
+    set either, `model` is assumed to already be a loadable path or a
+    plain (non-GGUF) HF repo id, and is returned as-is."""
+    model = config.base.model
+    if os.path.isfile(model):
+        return model
+    quant_file = getattr(config.base, "quant_file", None)
+    if not quant_file:
+        return model
+    from huggingface_hub import hf_hub_download
+    local_dir = getattr(config.base, "pretrained_models_dir", "/data/pretrained_models")
+    return hf_hub_download(repo_id=model, filename=quant_file, local_dir=local_dir)
+
+
 def _start_llama_cpp_server(config) -> subprocess.Popen:
     # llama-cpp-python[server] is a declared dependency (pyproject.toml's
     # `llama-cpp` extra) - unlike vllm below, its wheels aren't
@@ -97,7 +122,7 @@ def _start_llama_cpp_server(config) -> subprocess.Popen:
     log_file = open("llama_cpp.log", "w", encoding="utf-8")
 
     process = subprocess.Popen(
-        [sys.executable, "-m", "llama_cpp.server", "--model", config.base.model,
+        [sys.executable, "-m", "llama_cpp.server", "--model", resolve_local_model_path(config),
          "--port", str(port), "--use_mlock", "True", "--n_ctx", n_ctx],
         stdout=log_file, stderr=subprocess.STDOUT, env=os.environ.copy(),
     )
@@ -216,7 +241,7 @@ def _build_cpu_runner(config) -> BaseRunner:
         errors.append(f"llama.cpp server: {type(e).__name__}: {e}")
 
     try:
-        model, _ = setup_llama_cpp_model(config.base.model, config=config)
+        model, _ = setup_llama_cpp_model(resolve_local_model_path(config), config=config)
         return LlamaCppRunner(model, config.to_llama_cpp())
     except Exception as e:
         errors.append(f"llama.cpp in-process: {type(e).__name__}: {e}")

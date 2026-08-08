@@ -1763,6 +1763,7 @@ hf = [
     { name = "transformers" },
 ]
 llama-cpp = [
+    { name = "huggingface-hub" },
     { name = "llama-cpp-python", extra = ["server"] },
 ]
 logging = [
@@ -1772,6 +1773,8 @@ openrouter = [
     { name = "openai" },
 ]
 test = [
+    { name = "huggingface-hub" },
+    { name = "llama-cpp-python", extra = ["server"] },
     { name = "pytest" },
 ]
 tts-cloud = [
@@ -1796,7 +1799,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "huggingface-hub", marker = "extra == 'llama-cpp'" },
     { name = "jinja2" },
+    { name = "lector", extras = ["llama-cpp"], marker = "extra == 'test'" },
     { name = "llama-cpp-python", extras = ["server"], marker = "extra == 'llama-cpp'" },
     { name = "llama-cpp-python", extras = ["server"], marker = "extra == 'tts-orpheus'" },
     { name = "openai", marker = "extra == 'openrouter'" },

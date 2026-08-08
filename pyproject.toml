@@ -19,6 +19,9 @@ dependencies = [
 [project.optional-dependencies]
 llama-cpp = [
     "llama-cpp-python[server]",
+    # Resolves LlmConfig.model (a GGUF repo id) + quant_file into a real
+    # local file for llama.cpp to load - see resolve_local_model_path().
+    "huggingface_hub",
 ]
 vllm = [
     "vllm>=0.6",
@@ -49,6 +52,7 @@ logging = [
 ]
 test = [
     "pytest",
+    "lector[llama-cpp]",
 ]
 
 [dependency-groups]
