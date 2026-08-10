@@ -8,7 +8,14 @@ from unittest.mock import patch
 
 import pytest
 
-from llm_kit.llm_setup import LlmConfig, _start_llama_cpp_server, _start_vllm_server, resolve_local_model_path
+from llm_kit.llm_setup import (
+    LlmConfig,
+    _build_cpu_runner,
+    _build_gpu_runner,
+    _start_llama_cpp_server,
+    _start_vllm_server,
+    resolve_local_model_path,
+)
 
 
 def test_resolve_local_model_path_downloads_the_quant_file():
@@ -131,3 +138,63 @@ def test_start_vllm_server_raises_with_full_output_when_pip_install_fails(tmp_pa
     message = str(exc_info.value)
     assert "resolving..." in message
     assert "conflict" in message
+
+
+def test_build_cpu_runner_health_check_failure_reports_timeout_and_log_file(tmp_path, monkeypatch):
+    """A health-check failure used to just say "failed health check" - no
+    pointer to the timeout that was actually used or to the log file that
+    has the real reason (e.g. a large model still loading, or a genuine
+    crash), forcing a manual hunt through the working directory to find it."""
+    monkeypatch.chdir(tmp_path)
+    config = SimpleNamespace(base=SimpleNamespace(device="cpu", server_ready_timeout=5.0),
+                              generation=SimpleNamespace())
+    fake_process = SimpleNamespace(log_file=SimpleNamespace(name="llama_cpp.log"))
+
+    with patch("llm_kit.llm_setup._start_llama_cpp_server", return_value=fake_process), \
+         patch("llm_kit.llm_setup._wait_for_server_ready", return_value=False) as mock_wait, \
+         patch("llm_kit.llm_setup._terminate_process"), \
+         patch("llm_kit.llm_setup.setup_llama_cpp_model", side_effect=RuntimeError("boom")):
+        with pytest.raises(RuntimeError) as exc_info:
+            _build_cpu_runner(config)
+
+    assert mock_wait.call_args.kwargs["timeout"] == 5.0
+    message = str(exc_info.value)
+    assert "5.0" in message
+    assert "llama_cpp.log" in message
+
+
+def test_build_cpu_runner_uses_default_server_ready_timeout_when_unset(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    config = SimpleNamespace(base=SimpleNamespace(device="cpu"), generation=SimpleNamespace())
+    fake_process = SimpleNamespace(log_file=SimpleNamespace(name="llama_cpp.log"))
+
+    with patch("llm_kit.llm_setup._start_llama_cpp_server", return_value=fake_process), \
+         patch("llm_kit.llm_setup._wait_for_server_ready", return_value=False) as mock_wait, \
+         patch("llm_kit.llm_setup._terminate_process"), \
+         patch("llm_kit.llm_setup.setup_llama_cpp_model", side_effect=RuntimeError("boom")):
+        with pytest.raises(RuntimeError):
+            _build_cpu_runner(config)
+
+    assert mock_wait.call_args.kwargs["timeout"] == 60.0
+
+
+def test_build_gpu_runner_health_check_failure_reports_timeout_and_log_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    config = SimpleNamespace(base=SimpleNamespace(device="gpu", model="fake/model", server_ready_timeout=5.0),
+                              generation=SimpleNamespace())
+    fake_process = SimpleNamespace(log_file=SimpleNamespace(name="vllm_server.log"))
+
+    # vllm isn't installed in this test env - the in-process vLLM tier
+    # fails naturally with ImportError. setup_hf_model is mocked so the
+    # last-resort HF tier doesn't make a real network call for "fake/model".
+    with patch("llm_kit.llm_setup._start_vllm_server", return_value=fake_process), \
+         patch("llm_kit.llm_setup._wait_for_server_ready", return_value=False) as mock_wait, \
+         patch("llm_kit.llm_setup._terminate_process"), \
+         patch("llm_kit.llm_setup.setup_hf_model", side_effect=RuntimeError("boom")):
+        with pytest.raises(RuntimeError) as exc_info:
+            _build_gpu_runner(config)
+
+    assert mock_wait.call_args.kwargs["timeout"] == 5.0
+    message = str(exc_info.value)
+    assert "5.0" in message
+    assert "vllm_server.log" in message

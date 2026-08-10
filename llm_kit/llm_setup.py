@@ -266,13 +266,18 @@ def build_runner(config) -> BaseRunner:
 def _build_cpu_runner(config) -> BaseRunner:
     errors = []
     port = getattr(config.base, "port", 8001)
+    server_ready_timeout = getattr(config.base, "server_ready_timeout", 60.0)
 
     try:
         process = _start_llama_cpp_server(config)
-        if _wait_for_server_ready(process, port):
+        if _wait_for_server_ready(process, port, timeout=server_ready_timeout):
             return ServerRunner(process, port, config.base.model, config.to_chat_completions())
         _terminate_process(process)
-        errors.append("llama.cpp server: failed health check")
+        errors.append(
+            f"llama.cpp server: failed health check within {server_ready_timeout}s "
+            f"(set config.base.server_ready_timeout to wait longer for a large model) "
+            f"- see {process.log_file.name} for what the server actually logged"
+        )
     except Exception as e:
         errors.append(f"llama.cpp server: {type(e).__name__}: {e}")
 
@@ -288,13 +293,18 @@ def _build_cpu_runner(config) -> BaseRunner:
 def _build_gpu_runner(config) -> BaseRunner:
     errors = []
     port = getattr(config.base, "port", 8001)
+    server_ready_timeout = getattr(config.base, "server_ready_timeout", 60.0)
 
     try:
         process = _start_vllm_server(config)
-        if _wait_for_server_ready(process, port):
+        if _wait_for_server_ready(process, port, timeout=server_ready_timeout):
             return ServerRunner(process, port, config.base.model, config.to_chat_completions())
         _terminate_process(process)
-        errors.append("vLLM server: failed health check")
+        errors.append(
+            f"vLLM server: failed health check within {server_ready_timeout}s "
+            f"(set config.base.server_ready_timeout to wait longer for a large model) "
+            f"- see {process.log_file.name} for what the server actually logged"
+        )
     except Exception as e:
         errors.append(f"vLLM server: {type(e).__name__}: {e}")
 
