@@ -2,7 +2,7 @@
 
 Reusable LLM pipeline toolkit, extracted from the `subsymbolic/` module of
 the ARC-AGI project. Three independent pieces, meant to be used together
-or separately:
+or separately, plus one small optional aggregator:
 
 - **`prompt_builder.py`** — `PromptBuilder`/`PromptingConfig`: compose a
   prompt from ordered Jinja2 "blocks" (`<name>/<version>.j2` template
@@ -30,6 +30,16 @@ or separately:
   score with a pluggable `evaluator(task, generated_text) -> EvalResult`,
   log + checkpoint to wandb as it goes. Safe to interrupt and re-run with
   the same `run_id` - already-processed tasks are skipped.
+- **`runner_config.py`** — `RunnerConfig`: bundles `base`/`generation`/
+  `prompt` into the one object `build_runner(config)` already expects
+  (`config.base`, `config.generation`, `config.to_llama_cpp()`/`.to_vllm()`/
+  `.to_hf()`/`.to_chat_completions()`), so callers don't have to hand-roll
+  it. Also auto-syncs `chat_template_kwargs` (e.g. Qwen3's
+  `enable_thinking=False`) between `generation` and `prompt` when only one
+  side is set - see PromptingConfig.chat_template_kwargs's docstring for
+  why that setting has to reach two separate places. Entirely optional:
+  `build_runner()`/`PromptBuilder()` still take their own configs
+  directly if you'd rather wire them yourself.
 
 ## Install
 
@@ -44,19 +54,22 @@ uv add "llm-kit[logging]"         # + wandb logging (run_llm_over_tasks needs th
 ## Minimal usage
 
 ```python
-from llm_kit.prompt_builder import PromptBuilder, PromptingConfig
-from llm_kit.llm_setup import LlmConfig, build_runner
+from llm_kit.prompt_builder import PromptBuilder
+from llm_kit.llm_setup import build_runner
 from llm_kit.llm_run import EvalResult, run_llm_over_tasks
+from llm_kit.runner_config import RunnerConfig
 
-config = PromptingConfig(blocks_dir="prompts/", blocks=["instructions", "task"])
-builder = PromptBuilder(config, tokenizer, resolver_registry={}, filter_registry={})
+config = RunnerConfig()
+config.prompt.blocks_dir = "prompts/"
+config.prompt.blocks = ["instructions", "task"]
+builder = PromptBuilder(config.prompt, tokenizer, resolver_registry={}, filter_registry={})
 
 class LlmModule:
     def __init__(self, builder, runner):
         self.builder = builder
         self.runner = runner
 
-runner = build_runner(experiment_config)  # config.base: LlmConfig, config.generation: GenerationConfig
+runner = build_runner(config)  # build_runner reads config.base/.generation/.to_*()
 module = LlmModule(builder, runner)
 
 def my_evaluator(task, generated_text) -> EvalResult:
