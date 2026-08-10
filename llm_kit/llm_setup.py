@@ -145,20 +145,29 @@ def _start_llama_cpp_server(config) -> subprocess.Popen:
 
 def _start_vllm_server(config) -> subprocess.Popen:
     # vLLM's wheels are CUDA-version-sensitive (unlike llama-cpp-python's -
-    # see _start_llama_cpp_server), so it still needs reinstalling against
-    # whatever CUDA/torch build is actually on this machine rather than
-    # just being a declared dependency. Output is captured, not streamed,
-    # so a routine "already up to date" run doesn't flood the notebook -
-    # surfaced in full only if the install actually fails.
-    install = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "--upgrade", "vllm"],
-        capture_output=True, text=True,
-    )
-    if install.returncode != 0:
-        raise RuntimeError(
-            f"pip install --upgrade vllm failed (exit {install.returncode}):\n"
-            f"{install.stdout}\n{install.stderr}"
+    # see _start_llama_cpp_server), so there's no one version to just
+    # declare as a dependency ahead of time. But blindly `--upgrade`ing on
+    # every call is its own hazard: on a curated environment (Kaggle,
+    # Colab) it can silently pull the newest vllm release regardless of
+    # whether it matches the actual GPU/driver/CUDA stack present (T4s are
+    # CUDA-12-era hardware; a forced upgrade has landed CUDA-13 wheels that
+    # fail at import with `libcudart.so.13: cannot open shared object
+    # file`), and drags a pile of unrelated pip packages along with it. If
+    # vllm already imports, leave it alone - only install when it's
+    # missing entirely. Output is captured, not streamed, so a routine run
+    # doesn't flood the notebook - surfaced in full only if it fails.
+    try:
+        import vllm  # noqa: F401
+    except ImportError:
+        install = subprocess.run(
+            [sys.executable, "-m", "pip", "install", "vllm"],
+            capture_output=True, text=True,
         )
+        if install.returncode != 0:
+            raise RuntimeError(
+                f"pip install vllm failed (exit {install.returncode}):\n"
+                f"{install.stdout}\n{install.stderr}"
+            )
 
     port = getattr(config.base, "port", 8001)
     env = os.environ.copy()

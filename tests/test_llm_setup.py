@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -85,10 +86,10 @@ def test_start_llama_cpp_server_omits_chat_template_kwargs_when_unset(tmp_path, 
     assert "--chat_template_kwargs" not in args
 
 
-def test_start_vllm_server_does_not_stream_pip_install_output(tmp_path, monkeypatch):
-    """pip install --upgrade vllm runs on every call (vLLM's wheels are
-    CUDA-version-sensitive - see the inline comment) - a routine success
-    shouldn't flood the notebook with its output."""
+def test_start_vllm_server_installs_and_does_not_stream_output_when_vllm_missing(tmp_path, monkeypatch):
+    """vllm isn't importable in this test env, so _start_vllm_server should
+    fall into its install branch - a routine success shouldn't flood the
+    notebook with pip's output."""
     monkeypatch.chdir(tmp_path)
     config = SimpleNamespace(base=LlmConfig())
 
@@ -97,6 +98,23 @@ def test_start_vllm_server_does_not_stream_pip_install_output(tmp_path, monkeypa
         _start_vllm_server(config)
 
     assert mock_run.call_args.kwargs.get("capture_output") is True
+    assert "--upgrade" not in mock_run.call_args[0][0]
+    mock_popen.assert_called_once()
+
+
+def test_start_vllm_server_skips_install_when_vllm_already_importable(tmp_path, monkeypatch):
+    """A forced `--upgrade` on every call is its own hazard on a curated
+    environment (Kaggle/Colab) - it can silently pull a vllm release whose
+    CUDA wheels don't match the actual GPU/driver stack present. If vllm
+    already imports, it should be left alone entirely."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setitem(sys.modules, "vllm", SimpleNamespace())
+    config = SimpleNamespace(base=LlmConfig())
+
+    with patch("subprocess.run") as mock_run, patch("subprocess.Popen") as mock_popen:
+        _start_vllm_server(config)
+
+    mock_run.assert_not_called()
     mock_popen.assert_called_once()
 
 
