@@ -144,7 +144,21 @@ def _start_llama_cpp_server(config) -> subprocess.Popen:
 
 
 def _start_vllm_server(config) -> subprocess.Popen:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "vllm"])
+    # vLLM's wheels are CUDA-version-sensitive (unlike llama-cpp-python's -
+    # see _start_llama_cpp_server), so it still needs reinstalling against
+    # whatever CUDA/torch build is actually on this machine rather than
+    # just being a declared dependency. Output is captured, not streamed,
+    # so a routine "already up to date" run doesn't flood the notebook -
+    # surfaced in full only if the install actually fails.
+    install = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--upgrade", "vllm"],
+        capture_output=True, text=True,
+    )
+    if install.returncode != 0:
+        raise RuntimeError(
+            f"pip install --upgrade vllm failed (exit {install.returncode}):\n"
+            f"{install.stdout}\n{install.stderr}"
+        )
 
     port = getattr(config.base, "port", 8001)
     env = os.environ.copy()

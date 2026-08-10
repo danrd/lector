@@ -5,7 +5,9 @@ import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from llm_kit.llm_setup import LlmConfig, _start_llama_cpp_server, resolve_local_model_path
+import pytest
+
+from llm_kit.llm_setup import LlmConfig, _start_llama_cpp_server, _start_vllm_server, resolve_local_model_path
 
 
 def test_resolve_local_model_path_downloads_the_quant_file():
@@ -81,3 +83,33 @@ def test_start_llama_cpp_server_omits_chat_template_kwargs_when_unset(tmp_path, 
 
     args = mock_popen.call_args[0][0]
     assert "--chat_template_kwargs" not in args
+
+
+def test_start_vllm_server_does_not_stream_pip_install_output(tmp_path, monkeypatch):
+    """pip install --upgrade vllm runs on every call (vLLM's wheels are
+    CUDA-version-sensitive - see the inline comment) - a routine success
+    shouldn't flood the notebook with its output."""
+    monkeypatch.chdir(tmp_path)
+    config = SimpleNamespace(base=LlmConfig())
+
+    with patch("subprocess.run") as mock_run, patch("subprocess.Popen") as mock_popen:
+        mock_run.return_value = SimpleNamespace(returncode=0, stdout="", stderr="")
+        _start_vllm_server(config)
+
+    assert mock_run.call_args.kwargs.get("capture_output") is True
+    mock_popen.assert_called_once()
+
+
+def test_start_vllm_server_raises_with_full_output_when_pip_install_fails(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    config = SimpleNamespace(base=LlmConfig())
+
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = SimpleNamespace(returncode=1, stdout="resolving...", stderr="conflict")
+
+        with pytest.raises(RuntimeError) as exc_info:
+            _start_vllm_server(config)
+
+    message = str(exc_info.value)
+    assert "resolving..." in message
+    assert "conflict" in message
