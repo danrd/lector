@@ -21,6 +21,7 @@ backend's library to be installed.
 """
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -121,9 +122,21 @@ def _start_llama_cpp_server(config) -> subprocess.Popen:
     n_ctx = str(getattr(config.base, "n_ctx", getattr(config.generation, "max_tokens", 2048)))
     log_file = open("llama_cpp.log", "w", encoding="utf-8")
 
+    args = [sys.executable, "-m", "llama_cpp.server", "--model", resolve_local_model_path(config),
+            "--port", str(port), "--use_mlock", "True", "--n_ctx", n_ctx]
+    # Unlike vLLM/OpenAI-compatible servers in general, llama-cpp-python's
+    # server doesn't read chat_template_kwargs from the request body at all
+    # (CreateChatCompletionRequest has no such field, and silently drops
+    # unknown ones) - it's a model-load-time setting instead. GenerationConfig.
+    # to_chat_completions()'s `extra_body={"chat_template_kwargs": ...}` (the
+    # ServerRunner request path) has no effect here; this CLI flag is the
+    # only thing that actually reaches it.
+    chat_template_kwargs = getattr(config.generation, "chat_template_kwargs", None)
+    if chat_template_kwargs:
+        args += ["--chat_template_kwargs", json.dumps(chat_template_kwargs)]
+
     process = subprocess.Popen(
-        [sys.executable, "-m", "llama_cpp.server", "--model", resolve_local_model_path(config),
-         "--port", str(port), "--use_mlock", "True", "--n_ctx", n_ctx],
+        args,
         stdout=log_file, stderr=subprocess.STDOUT, env=os.environ.copy(),
     )
     process.log_file = log_file

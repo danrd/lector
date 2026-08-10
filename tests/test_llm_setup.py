@@ -1,10 +1,11 @@
 """Tests for llm_kit/llm_setup.py's LlmConfig."""
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from llm_kit.llm_setup import LlmConfig, resolve_local_model_path
+from llm_kit.llm_setup import LlmConfig, _start_llama_cpp_server, resolve_local_model_path
 
 
 def test_resolve_local_model_path_downloads_the_quant_file():
@@ -45,3 +46,38 @@ def test_resolve_local_model_path_passes_through_an_existing_local_file(tmp_path
 
     mock_download.assert_not_called()
     assert path == str(gguf)
+
+
+def _fake_server_config(tmp_path, chat_template_kwargs=None):
+    gguf = tmp_path / "tiny.gguf"
+    gguf.write_bytes(b"")
+    base = LlmConfig(model=str(gguf), quant_file="")
+    generation = SimpleNamespace(chat_template_kwargs=chat_template_kwargs or {}, max_tokens=64)
+    return SimpleNamespace(base=base, generation=generation)
+
+
+def test_start_llama_cpp_server_passes_chat_template_kwargs_when_set(tmp_path, monkeypatch):
+    """llama-cpp-python's server doesn't read chat_template_kwargs from the
+    request body (unlike vLLM) - it's a model-load-time CLI flag instead,
+    so it has to be on the spawn command, not just in generation_kwargs."""
+    monkeypatch.chdir(tmp_path)
+    config = _fake_server_config(tmp_path, chat_template_kwargs={"enable_thinking": False})
+
+    with patch("subprocess.Popen") as mock_popen:
+        _start_llama_cpp_server(config)
+
+    args = mock_popen.call_args[0][0]
+    assert "--chat_template_kwargs" in args
+    value = args[args.index("--chat_template_kwargs") + 1]
+    assert json.loads(value) == {"enable_thinking": False}
+
+
+def test_start_llama_cpp_server_omits_chat_template_kwargs_when_unset(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    config = _fake_server_config(tmp_path)
+
+    with patch("subprocess.Popen") as mock_popen:
+        _start_llama_cpp_server(config)
+
+    args = mock_popen.call_args[0][0]
+    assert "--chat_template_kwargs" not in args

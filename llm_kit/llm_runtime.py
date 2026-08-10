@@ -65,6 +65,21 @@ class GenerationConfig(BaseModel):
     best_of: int = Field(default=1, ge=1,
                            description="Generate best_of candidates, return the best n. Must be ≥ n. Required for beam search.")
 
+    chat_template_kwargs: Dict[str, Any] = Field(default_factory=dict,
+                                   description="Extra kwargs forwarded to the backend's own chat-template "
+                                               "application, for server-backed tiers only (e.g. "
+                                               "{'enable_thinking': False} for Qwen3's reasoning toggle). "
+                                               "Sent via to_chat_completions()'s extra_body - vLLM reads "
+                                               "chat_template_kwargs from there; llama-cpp-python's server "
+                                               "does NOT (it's a model-load-time setting there instead - see "
+                                               "llm_setup._start_llama_cpp_server's --chat_template_kwargs "
+                                               "flag). Ignored by to_llama_cpp/to_vllm/to_hf: those tiers "
+                                               "consume an already-built prompt string, with any "
+                                               "chat-template kwargs already baked in by "
+                                               "PromptingConfig.chat_template_kwargs instead - set both by "
+                                               "hand if you don't know ahead of time which tier will end up "
+                                               "active.")
+
     def to_dict(self, exclude_none: bool = True, exclude_unset: bool = False) -> Dict[str, Any]:
         """Plain dict for **kwargs unpacking."""
         return self.model_dump(exclude_none=exclude_none, exclude_unset=exclude_unset)
@@ -171,6 +186,9 @@ class GenerationConfig(BaseModel):
 
         if seed is not None:
             params["seed"] = seed
+
+        if self.chat_template_kwargs:
+            params["extra_body"] = {"chat_template_kwargs": self.chat_template_kwargs}
 
         return {k: v for k, v in params.items() if v is not None}
 
