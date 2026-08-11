@@ -83,6 +83,7 @@ class LlmConfig(BaseModel):
     n_tokens_batch: int = 512
     use_mlock: bool = True
     n_gpu_layers: int = 0
+    tensor_parallel_size: int = 1  # vLLM: shard the model across this many GPUs
 
 
 # ---------------------------------------------------------------------------
@@ -184,8 +185,13 @@ def _start_vllm_server(config) -> subprocess.Popen:
     env["VLLM_USE_FLASHINFER_SAMPLER"] = "0"
     log_file = open("vllm_server.log", "w", encoding="utf-8")
 
+    args = ["vllm", "serve", config.llm.model, "--port", str(port)]
+    tensor_parallel_size = getattr(config.llm, "tensor_parallel_size", 1)
+    if tensor_parallel_size and tensor_parallel_size != 1:
+        args += ["--tensor-parallel-size", str(tensor_parallel_size)]
+
     process = subprocess.Popen(
-        ["vllm", "serve", config.llm.model, "--port", str(port)],
+        args,
         stdout=log_file, stderr=subprocess.STDOUT, env=env,
     )
     process.log_file = log_file
@@ -321,7 +327,7 @@ def _build_gpu_runner(config) -> BaseRunner:
 
     try:
         from vllm import LLM
-        llm = LLM(model=config.llm.model)
+        llm = LLM(model=config.llm.model, tensor_parallel_size=getattr(config.llm, "tensor_parallel_size", 1))
         return VLLMRunner(llm, config.to_vllm())
     except Exception as e:
         errors.append(f"vLLM in-process: {type(e).__name__}: {e}")

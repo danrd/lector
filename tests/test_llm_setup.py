@@ -106,8 +106,8 @@ def test_start_llama_cpp_server_omits_chat_template_kwargs_when_unset(tmp_path, 
     assert "--chat_template_kwargs" not in args
 
 
-def _fake_vllm_config():
-    return SimpleNamespace(base=BaseConfig(), llm=LlmConfig())
+def _fake_vllm_config(**llm_overrides):
+    return SimpleNamespace(base=BaseConfig(), llm=LlmConfig(**llm_overrides))
 
 
 def test_start_vllm_server_installs_and_does_not_stream_output_when_vllm_missing(tmp_path, monkeypatch):
@@ -219,3 +219,32 @@ def test_build_gpu_runner_health_check_failure_reports_timeout_and_log_file(tmp_
     message = str(exc_info.value)
     assert "5.0" in message
     assert "vllm_server.log" in message
+
+
+def test_start_vllm_server_passes_tensor_parallel_size_when_set(tmp_path, monkeypatch):
+    """Without --tensor-parallel-size, vllm serve loads the whole model
+    onto a single GPU regardless of how many are visible - on a
+    multi-GPU box with a model too big for one card, that's an OOM, not
+    a slow-but-working load."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setitem(sys.modules, "vllm", SimpleNamespace())
+    config = _fake_vllm_config(tensor_parallel_size=2)
+
+    with patch("subprocess.Popen") as mock_popen:
+        _start_vllm_server(config)
+
+    args = mock_popen.call_args[0][0]
+    assert "--tensor-parallel-size" in args
+    assert args[args.index("--tensor-parallel-size") + 1] == "2"
+
+
+def test_start_vllm_server_omits_tensor_parallel_size_by_default(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setitem(sys.modules, "vllm", SimpleNamespace())
+    config = _fake_vllm_config()
+
+    with patch("subprocess.Popen") as mock_popen:
+        _start_vllm_server(config)
+
+    args = mock_popen.call_args[0][0]
+    assert "--tensor-parallel-size" not in args
