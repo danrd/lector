@@ -23,14 +23,15 @@ from __future__ import annotations
 from pydantic import BaseModel, Field, model_validator
 
 from llm_kit.llm_runtime import GenerationConfig
-from llm_kit.llm_setup import LlmConfig
+from llm_kit.llm_setup import BaseConfig, LlmConfig
 from llm_kit.prompt_builder import PromptingConfig
 
 
 class RunnerConfig(BaseModel):
-    """Bundles the three configs build_runner()/PromptBuilder() need, with
+    """Bundles the configs build_runner()/PromptBuilder() need, with
     cross-config defaults synced where a setting has to reach both."""
-    base: LlmConfig = Field(default_factory=LlmConfig)
+    base: BaseConfig = Field(default_factory=BaseConfig)
+    llm: LlmConfig = Field(default_factory=LlmConfig)
     generation: GenerationConfig = Field(default_factory=GenerationConfig)
     prompt: PromptingConfig = Field(default_factory=PromptingConfig)
 

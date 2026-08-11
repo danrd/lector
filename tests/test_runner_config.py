@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from llm_kit.llm_runtime import GenerationConfig
-from llm_kit.llm_setup import LlmConfig
+from llm_kit.llm_setup import BaseConfig
 from llm_kit.prompt_builder import PromptingConfig
 from llm_kit.runner_config import RunnerConfig
 
@@ -45,7 +45,7 @@ def test_chat_template_kwargs_sync_does_not_alias_the_dict():
 
 
 def test_to_chat_completions_delegates_to_generation_seeded_from_base():
-    config = RunnerConfig(base=LlmConfig(seed=7), generation=GenerationConfig(temperature=0.5))
+    config = RunnerConfig(base=BaseConfig(seed=7), generation=GenerationConfig(temperature=0.5))
 
     params = config.to_chat_completions()
 
