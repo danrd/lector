@@ -1754,28 +1754,25 @@ dependencies = [
     { name = "pandas" },
     { name = "pydantic" },
     { name = "pyyaml" },
+    { name = "toolkit", extra = ["llm-kit"] },
 ]
 
 [package.optional-dependencies]
 hf = [
-    { name = "sentencepiece" },
-    { name = "torch" },
-    { name = "transformers" },
+    { name = "toolkit", extra = ["llm-kit-hf"] },
 ]
 llama-cpp = [
-    { name = "huggingface-hub" },
-    { name = "llama-cpp-python", extra = ["server"] },
+    { name = "toolkit", extra = ["llm-kit-llama-cpp"] },
 ]
 logging = [
-    { name = "wandb" },
+    { name = "toolkit", extra = ["llm-kit-logging"] },
 ]
 openrouter = [
-    { name = "openai" },
+    { name = "toolkit", extra = ["llm-kit-openrouter"] },
 ]
 test = [
-    { name = "huggingface-hub" },
-    { name = "llama-cpp-python", extra = ["server"] },
     { name = "pytest" },
+    { name = "toolkit", extra = ["llm-kit-llama-cpp"] },
 ]
 tts-cloud = [
     { name = "openai" },
@@ -1789,7 +1786,7 @@ tts-orpheus = [
     { name = "torch" },
 ]
 vllm = [
-    { name = "vllm" },
+    { name = "toolkit", extra = ["llm-kit-vllm"] },
 ]
 
 [package.dev-dependencies]
@@ -1799,25 +1796,23 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "huggingface-hub", marker = "extra == 'llama-cpp'" },
     { name = "jinja2" },
     { name = "lector", extras = ["llama-cpp"], marker = "extra == 'test'" },
-    { name = "llama-cpp-python", extras = ["server"], marker = "extra == 'llama-cpp'" },
     { name = "llama-cpp-python", extras = ["server"], marker = "extra == 'tts-orpheus'" },
-    { name = "openai", marker = "extra == 'openrouter'" },
     { name = "openai", marker = "extra == 'tts-cloud'" },
     { name = "pandas" },
     { name = "piper-tts", marker = "extra == 'tts-local'" },
     { name = "pydantic" },
     { name = "pytest", marker = "extra == 'test'" },
     { name = "pyyaml" },
-    { name = "sentencepiece", marker = "extra == 'hf'" },
     { name = "snac", marker = "extra == 'tts-orpheus'" },
-    { name = "torch", marker = "extra == 'hf'" },
+    { name = "toolkit", extras = ["llm-kit"], git = "https://github.com/danrd/toolkit.git" },
+    { name = "toolkit", extras = ["llm-kit-hf"], marker = "extra == 'hf'", git = "https://github.com/danrd/toolkit.git" },
+    { name = "toolkit", extras = ["llm-kit-llama-cpp"], marker = "extra == 'llama-cpp'", git = "https://github.com/danrd/toolkit.git" },
+    { name = "toolkit", extras = ["llm-kit-logging"], marker = "extra == 'logging'", git = "https://github.com/danrd/toolkit.git" },
+    { name = "toolkit", extras = ["llm-kit-openrouter"], marker = "extra == 'openrouter'", git = "https://github.com/danrd/toolkit.git" },
+    { name = "toolkit", extras = ["llm-kit-vllm"], marker = "extra == 'vllm'", git = "https://github.com/danrd/toolkit.git" },
     { name = "torch", marker = "extra == 'tts-orpheus'" },
-    { name = "transformers", marker = "extra == 'hf'" },
-    { name = "vllm", marker = "extra == 'vllm'", specifier = ">=0.6" },
-    { name = "wandb", marker = "extra == 'logging'" },
 ]
 provides-extras = ["llama-cpp", "vllm", "openrouter", "hf", "tts-local", "tts-cloud", "tts-orpheus", "logging", "test"]
 
@@ -5038,6 +5033,37 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a2/28/f96a19c3c09a9f39a3f86eeb7f64aeed3793bdfa033e406a5f5b1a90b606/tokenspeed_triton-3.8.10.post20260721-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:c0b66e0587b925e4bfacaf56dd1edbaa149fd6456880387287bb8cda8cdadfbb", size = 87207488, upload-time = "2026-07-21T17:14:34.953Z" },
     { url = "https://files.pythonhosted.org/packages/1d/44/89740db8951918c9acd8731243eef8b44d0eb92ea423552639265c46018e/tokenspeed_triton-3.8.10.post20260721-cp312-abi3-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:d793ad0eaebb1d08272c97a2b8f2c31304231748b03de9a08e70a362de92a6e0", size = 82966664, upload-time = "2026-07-21T17:14:38.568Z" },
     { url = "https://files.pythonhosted.org/packages/91/53/f46b401e8ec8998f5b9c39cff0614b796bf49113a09f588cfdfa342789a3/tokenspeed_triton-3.8.10.post20260721-cp312-abi3-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:66cba8d32a1539afd0ff3eec1782b082d01b4db6824d68017d1d789a03d0be37", size = 87210295, upload-time = "2026-07-21T17:14:42.173Z" },
+]
+
+[[package]]
+name = "toolkit"
+version = "0.1.0"
+source = { git = "https://github.com/danrd/toolkit.git#f9d385b29f8d2c7ed41e14c5b2e233fae00d39b3" }
+
+[package.optional-dependencies]
+llm-kit = [
+    { name = "jinja2" },
+    { name = "pandas" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+]
+llm-kit-hf = [
+    { name = "sentencepiece" },
+    { name = "torch" },
+    { name = "transformers" },
+]
+llm-kit-llama-cpp = [
+    { name = "huggingface-hub" },
+    { name = "llama-cpp-python", extra = ["server"] },
+]
+llm-kit-logging = [
+    { name = "wandb" },
+]
+llm-kit-openrouter = [
+    { name = "openai" },
+]
+llm-kit-vllm = [
+    { name = "vllm" },
 ]
 
 [[package]]

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "lector"
 version = "0.1.0"
-description = "Personal lecture generator: topic -> Obsidian-grounded content -> narrated audio. Built on the vendored llm_kit toolkit (llm_kit/README.md)."
+description = "Personal lecture generator: topic -> Obsidian-grounded content -> narrated audio. Built on the llm_kit toolkit (toolkit/llm_kit/README.md)."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"
@@ -14,27 +14,21 @@ dependencies = [
     "jinja2",
     "pandas",
     "pyyaml",
+    "toolkit[llm-kit] @ git+https://github.com/danrd/toolkit.git",
 ]
 
 [project.optional-dependencies]
 llama-cpp = [
-    "llama-cpp-python[server]",
-    # Resolves LlmConfig.model (a GGUF repo id) + quant_file into a real
-    # local file for llama.cpp to load - see resolve_local_model_path().
-    "huggingface_hub",
+    "toolkit[llm-kit-llama-cpp] @ git+https://github.com/danrd/toolkit.git",
 ]
 vllm = [
-    "vllm>=0.6",
+    "toolkit[llm-kit-vllm] @ git+https://github.com/danrd/toolkit.git",
 ]
 openrouter = [
-    "openai",
+    "toolkit[llm-kit-openrouter] @ git+https://github.com/danrd/toolkit.git",
 ]
 hf = [
-    "transformers",
-    "torch",
-    # Many HF tokenizers (Llama/Qwen family included) are SentencePiece-based;
-    # AutoTokenizer.from_pretrained() needs this installed to convert them.
-    "sentencepiece",
+    "toolkit[llm-kit-hf] @ git+https://github.com/danrd/toolkit.git",
 ]
 tts-local = [
     "piper-tts",
@@ -48,7 +42,7 @@ tts-orpheus = [
     "torch",
 ]
 logging = [
-    "wandb",
+    "toolkit[llm-kit-logging] @ git+https://github.com/danrd/toolkit.git",
 ]
 test = [
     "pytest",
@@ -60,8 +54,11 @@ dev = [
     "ruff",
 ]
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.hatch.build.targets.wheel]
-packages = ["llm_kit", "lector"]
+packages = ["lector"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

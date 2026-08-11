@@ -8,8 +8,8 @@ file (optionally uploaded to YouTube with a static/slide image later -
 not built, see "Not built yet").
 
 Status: the topic -> audio content pipeline is complete end to end - see
-`lector/pipeline.py`. Built on [`llm_kit`](llm_kit/README.md) (vendored
-here, not a separate dependency yet - see that file for what it
+`lector/pipeline.py`. Built on [`llm_kit`](https://github.com/danrd/toolkit/blob/main/llm_kit/README.md)
+(a dependency, from the `toolkit` repo - see that file for what it
 provides: prompt composition, backend-agnostic LLM inference, a
 resumable task-processing loop).
 
