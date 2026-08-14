@@ -5038,7 +5038,7 @@ wheels = [
 [[package]]
 name = "toolkit"
 version = "0.1.0"
-source = { git = "https://github.com/danrd/toolkit.git#fd2e351f97eb38aba93c17890182b088b78a771c" }
+source = { git = "https://github.com/danrd/toolkit.git#823e5e4852248186963e969dba94fcb23e7ab1ac" }
 
 [package.optional-dependencies]
 llm-kit = [
