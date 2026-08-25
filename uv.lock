@@ -1751,7 +1751,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "jinja2" },
-    { name = "pandas" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "toolkit", extra = ["llm-kit"] },
@@ -1800,7 +1799,6 @@ requires-dist = [
     { name = "lector", extras = ["llama-cpp"], marker = "extra == 'test'" },
     { name = "llama-cpp-python", extras = ["server"], marker = "extra == 'tts-orpheus'" },
     { name = "openai", marker = "extra == 'tts-cloud'" },
-    { name = "pandas" },
     { name = "piper-tts", marker = "extra == 'tts-local'" },
     { name = "pydantic" },
     { name = "pytest", marker = "extra == 'test'" },
@@ -5038,7 +5036,7 @@ wheels = [
 [[package]]
 name = "toolkit"
 version = "0.1.0"
-source = { git = "https://github.com/danrd/toolkit.git#05bff9b29be1913b7907bf73ff60455821b5bc31" }
+source = { git = "https://github.com/danrd/toolkit.git#8a1a275e7313ec161516446cd21425b079ec9ac9" }
 
 [package.optional-dependencies]
 llm-kit = [

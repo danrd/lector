@@ -20,6 +20,8 @@ import sys
 from pathlib import Path
 from typing import List, Optional, Sequence
 
+from llm_kit.prompt_builder import ApproxTokenizer
+
 from lector.knowledge_base import Note, load_vault
 from lector.lecture import LectureConfig
 from lector.narration import NarrationConfig
@@ -29,14 +31,6 @@ from lector.tts_runtime import BaseTTSRunner, SynthesisConfig
 PIPER = "piper"
 OPENAI = "openai"
 ORPHEUS = "orpheus"
-
-# Same whitespace-split stand-in maestro's app.py uses: PromptBuilder only
-# needs .tokenize(text) to return something with a len() for token-budget
-# accounting, and pulling a real HF tokenizer in would mean downloading a
-# model just to count tokens approximately anyway.
-class ApproxTokenizer:
-    def tokenize(self, text: str) -> List[str]:
-        return text.split()
 
 
 def build_llm_runner(model: str, max_tokens: int):
