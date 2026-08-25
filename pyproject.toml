@@ -16,6 +16,9 @@ dependencies = [
     "toolkit[llm-kit] @ git+https://github.com/danrd/toolkit.git",
 ]
 
+[project.scripts]
+lector = "lector.cli:main"
+
 [project.optional-dependencies]
 llama-cpp = [
     "toolkit[llm-kit-llama-cpp] @ git+https://github.com/danrd/toolkit.git",

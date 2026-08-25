@@ -64,6 +64,12 @@ resumable task-processing loop).
   of vault notes. Soft failures (a prompt that doesn't fit its
   token_limit) are reported, not masked - the result says exactly which
   stage a run got to, with only the fields that stage reached populated.
+- **`lector/cli.py`** — the command-line entry point (`lector` or
+  `python -m lector`): loads the vault, picks a TTS backend, runs the
+  pipeline, and writes the WAV plus the narration script beside it. Pure
+  composition - it holds no pipeline logic of its own. A run that stops
+  early reports the stage it stopped at and exits non-zero, and anything
+  left unresolved by verification is printed rather than quietly dropped.
 
 ## Not built yet
 
@@ -88,6 +94,19 @@ uv sync --extra test
 cp .env.example .env   # fill in OPENROUTER_API_KEY / OPENAI_API_KEY / WANDB_API_KEY as needed
 uv run pytest
 ```
+
+Generating a lecture needs the `openrouter` extra (the CLI generates
+through OpenRouter) and a TTS backend:
+
+```bash
+uv sync --extra openrouter --extra tts-local
+uv run lector "Galois theory" --vault ~/ObsidianVault --voice /path/to/voice.onnx
+```
+
+`--vault` is optional: without it the lecture draws on the model's own
+knowledge only, and verification flags those claims as ungrounded.
+`uv run lector --help` lists the rest (`--tts`, `--language`, `--speed`,
+`--model`).
 
 TTS backends are optional extras, install whichever you'll actually use:
 
