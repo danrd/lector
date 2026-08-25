@@ -145,3 +145,23 @@ def test_generate_lecture_audio_passes_max_chunk_chars_through(tmp_path):
 
     assert result.audio.num_chunks == 3
     assert len(tts_runner.calls) == 3
+
+
+def test_generate_lecture_audio_stops_at_narration_on_a_whitespace_only_script(tmp_path):
+    """Regression test: the emptiness check was `if not script`, which a
+    script of pure whitespace passes (it's truthy). The run then reached
+    audio.py, which found no sentences to chunk and raised - turning a
+    model returning nothing useful into a crash, instead of the soft
+    stage_reached=NARRATION every other short-circuit in this pipeline
+    produces."""
+    runner = _FakeRunner(responses=["A clean draft.", "   \n\t  "])
+    tts_runner = _FakeTTSRunner()
+
+    result = generate_lecture_audio(
+        "Some topic", [], _FakeTokenizer(), runner, tts_runner, str(tmp_path / "out.wav"),
+    )
+
+    assert result.stage_reached == PipelineStage.NARRATION
+    assert result.draft == "A clean draft."
+    assert result.audio is None
+    assert tts_runner.calls == []

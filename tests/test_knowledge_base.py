@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from lector.knowledge_base import (
+    Note,
     VaultSearchConfig,
     format_results,
     load_vault,
@@ -231,3 +232,60 @@ def test_resolver_integrates_end_to_end_with_prompt_builder_when_topic_has_no_no
 
     assert result is not None
     assert "Lecture on: quantum chromodynamics" in result
+
+
+# -- per-note scoring caches --------------------------------------------------
+
+def test_scoring_terms_are_derived_once_and_reused(monkeypatch):
+    """search_vault scores every note against every query, and
+    verification.py issues one search per flagged claim - so a note's
+    body must not be re-tokenized per search. Counts actual _tokenize
+    calls rather than asserting on timing."""
+    import lector.knowledge_base as kb
+
+    calls = []
+    real_tokenize = kb._tokenize
+
+    def counting_tokenize(text):
+        calls.append(text)
+        return real_tokenize(text)
+
+    monkeypatch.setattr(kb, "_tokenize", counting_tokenize)
+
+    note = Note(path=Path("n.md"), title="Galois Theory", tags=frozenset({"algebra"}),
+                frontmatter={}, body="galois field extension " * 20)
+    config = VaultSearchConfig(min_score=0.0)
+
+    kb.search_vault([note], "galois", config=config)
+    calls_after_first = len(calls)
+    kb.search_vault([note], "algebra", config=config)
+    kb.search_vault([note], "field", config=config)
+
+    # Only the three per-query tokenizations of the query string itself
+    # should be added - the note's title/tags/body stay cached.
+    assert len(calls) == calls_after_first + 2
+    assert note.body not in calls[calls_after_first:]
+
+
+def test_caching_does_not_change_scores():
+    """Parity check for the caching refactor: the score has to come out
+    exactly as the inline per-call derivation produced."""
+    from collections import Counter
+
+    import lector.knowledge_base as kb
+
+    note = Note(path=Path("n.md"), title="Galois Theory",
+                tags=frozenset({"algebra", "math/theory"}), frontmatter={},
+                body="galois galois galois field extension algebra " * 5)
+    config = VaultSearchConfig()
+    query_terms = set(kb._tokenize("galois algebra"))
+
+    title_terms = set(kb._tokenize(note.title))
+    tag_terms = {t for tag in note.tags for t in kb._tokenize(tag)}
+    body_counts = Counter(kb._tokenize(note.body))
+    expected = (config.title_weight * len(query_terms & title_terms)
+                + config.tag_weight * len(query_terms & tag_terms)
+                + config.body_term_weight * sum(min(body_counts[t], config.body_term_cap)
+                                                for t in query_terms))
+
+    assert kb._score(note, query_terms, config) == expected

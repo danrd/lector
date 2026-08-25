@@ -12,7 +12,6 @@ requires-python = ">=3.11"
 dependencies = [
     "pydantic",
     "jinja2",
-    "pandas",
     "pyyaml",
     "toolkit[llm-kit] @ git+https://github.com/danrd/toolkit.git",
 ]

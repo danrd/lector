@@ -58,7 +58,17 @@ def split_into_chunks(text: str, max_chunk_chars: int = 1000) -> List[str]:
 
 def _concatenate_wavs(wav_bytes_list: List[bytes], output_path: str) -> float:
     """Write every chunk's PCM frames into one WAV file at
-    `output_path`, in order. Returns the total duration in seconds."""
+    `output_path`, in order. Returns the total duration in seconds.
+
+    Refuses an empty list rather than producing a file: a WAV's header
+    needs a channel count / sample width / frame rate, and with no chunk
+    to take those from there is nothing to write. (Leaving this to
+    `wave` itself only turns it into a "# channels not specified" error
+    raised on close, from a caller that never mentioned channels.)
+    """
+    if not wav_bytes_list:
+        raise ValueError("Nothing to concatenate: no audio chunks were synthesized.")
+
     params = None
     total_frames = 0
 
@@ -82,7 +92,7 @@ def _concatenate_wavs(wav_bytes_list: List[bytes], output_path: str) -> float:
                 out_file.writeframes(chunk_file.readframes(chunk_file.getnframes()))
                 total_frames += chunk_file.getnframes()
 
-    return total_frames / params.framerate if params else 0.0
+    return total_frames / params.framerate
 
 
 def synthesize_long_text(text: str, runner: BaseTTSRunner, output_path: str,

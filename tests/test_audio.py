@@ -13,7 +13,7 @@ import wave
 
 import pytest
 
-from lector.audio import AudioResult, split_into_chunks, synthesize_long_text
+from lector.audio import AudioResult, _concatenate_wavs, split_into_chunks, synthesize_long_text
 from lector.tts_runtime import BaseTTSRunner
 
 
@@ -132,3 +132,16 @@ def test_synthesize_long_text_raises_on_mismatched_chunk_formats(tmp_path):
 def test_synthesize_long_text_raises_on_empty_text(tmp_path):
     with pytest.raises(ValueError):
         synthesize_long_text("   ", _FakeTTSRunner(), str(tmp_path / "out.wav"))
+
+
+def test_concatenate_wavs_refuses_an_empty_chunk_list(tmp_path):
+    """A WAV header needs a channel count/sample width/frame rate, and
+    with no chunk there's nothing to take them from - so this can't
+    produce a file. It used to look like it returned 0.0 for this case;
+    it never did, because closing an unconfigured wave file raises first,
+    surfacing as a bare "# channels not specified" from a caller that
+    never mentioned channels."""
+    output_path = str(tmp_path / "out.wav")
+
+    with pytest.raises(ValueError, match="Nothing to concatenate"):
+        _concatenate_wavs([], output_path)

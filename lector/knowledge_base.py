@@ -19,6 +19,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import List, Optional
 
@@ -32,12 +33,37 @@ _INLINE_TAG_RE = re.compile(r"(?<!\w)#([\w/-]+)")
 
 @dataclass
 class Note:
-    """One parsed vault note."""
+    """One parsed vault note.
+
+    The three `*_terms`/`*_counts` properties below are what scoring
+    actually reads (see _score); each is derived once, on first use, and
+    cached on the instance. Deriving them per search instead would mean
+    re-tokenizing every note's full body on every query - and queries are
+    not one-per-run: verification.py issues a separate vault search per
+    flagged claim, so a draft with N claims over a vault of M notes would
+    tokenize M bodies N times over.
+
+    That caching assumes a Note is not mutated after it's parsed (nothing
+    here does - load_vault parses and hands them off read-only); assigning
+    to .body/.title/.tags afterwards would leave the cached terms stale.
+    """
     path: Path
     title: str
     tags: frozenset
     frontmatter: dict
     body: str
+
+    @cached_property
+    def title_terms(self) -> frozenset:
+        return frozenset(_tokenize(self.title))
+
+    @cached_property
+    def tag_terms(self) -> frozenset:
+        return frozenset(t for tag in self.tags for t in _tokenize(tag))
+
+    @cached_property
+    def body_counts(self) -> Counter:
+        return Counter(_tokenize(self.body))
 
 
 @dataclass
@@ -112,16 +138,11 @@ def load_vault(vault_path: "str | Path") -> List[Note]:
 
 
 def _score(note: Note, query_terms: set, config: VaultSearchConfig) -> float:
-    title_terms = set(_tokenize(note.title))
-    tag_terms = {t for tag in note.tags for t in _tokenize(tag)}
-    body_terms = _tokenize(note.body)
-
     score = 0.0
-    score += config.title_weight * len(query_terms & title_terms)
-    score += config.tag_weight * len(query_terms & tag_terms)
+    score += config.title_weight * len(query_terms & note.title_terms)
+    score += config.tag_weight * len(query_terms & note.tag_terms)
 
-    body_counts = Counter(body_terms)
-    body_hits = sum(min(body_counts[term], config.body_term_cap) for term in query_terms)
+    body_hits = sum(min(note.body_counts[term], config.body_term_cap) for term in query_terms)
     score += config.body_term_weight * body_hits
 
     return score

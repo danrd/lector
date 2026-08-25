@@ -82,7 +82,11 @@ def generate_lecture_audio(topic: str, notes: List[Note], tokenizer, runner,
     annotated_draft = annotate_draft(draft, verification_results)
 
     narration_result = rewrite_for_narration(annotated_draft, tokenizer, runner, config.narration)
-    if not narration_result.script:
+    # .strip(): a whitespace-only script is as unusable as an empty one and
+    # has to stop here for the same reason - audio.py splits on sentence
+    # boundaries, finds none, and raises, which would defeat the soft
+    # stage_reached=NARRATION outcome this branch exists to produce.
+    if not narration_result.script.strip():
         return LectureAudioResult(
             stage_reached=PipelineStage.NARRATION, topic=topic, draft=draft,
             verification_results=verification_results, annotated_draft=annotated_draft,
