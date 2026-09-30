@@ -25,6 +25,25 @@ implementation (github.com/Zuellni/Orpheus-GGUF), not yet run end to
 end against real Orpheus GGUF + SNAC checkpoints - treat as a starting
 point to validate once those are downloaded, not as confirmed-working.
 
+Considered, not built: VoiceStudio (github.com/debpalash/VoiceStudio), a
+local desktop app with voice cloning, voice design from a description and
+audiobook/batch jobs over about sixteen pluggable engines (default
+k2-fsa/OmniVoice), claiming 646 languages. It could stand in for the
+voice-cloning path OrpheusRunner has not yet validated, as a fourth runner
+talking to it over a process boundary. What its documentation says, and
+what stopped this short of a runner: synthesis is exposed only as the MCP
+tool `generate_speech` (streamable HTTP at http://localhost:3900/mcp/, or
+a stdio shim) - no REST synthesis endpoint and no OpenAI-compatible one is
+documented, so the runner would be an MCP client; it is an Electron/Bun/
+Rust app with a Docker image, and headless use is not described; on CPU it
+is "~2x slower than MPS, more against CUDA" with no real-time factor
+published; Russian is not named among its languages, only the 646 total.
+Not checked: that any engine speaks Russian well, or how long a lecture
+takes on this hardware. Its licence is AGPL-3.0 (this repository is MIT),
+which a separate process does not touch and copied code would; each model
+carries its own licence. Worth trying before finishing OrpheusRunner if
+cloning is wanted.
+
 Heavy/optional dependencies (piper, openai, llama_cpp, torch, snac) are
 imported lazily inside whichever class actually needs them, so
 importing this module never requires every backend's library to be
