@@ -51,6 +51,7 @@ def test_needs_verbalization_spots_latex_code_greek_and_arrows():
     assert needs_verbalization("call `fit()` first")
     assert needs_verbalization("σ-алгебра событий")
     assert needs_verbalization("pipeline → network")
+    assert needs_verbalization("счётных объединений/пересечений")
     assert not needs_verbalization("Обычное предложение, без формул.")
 
 

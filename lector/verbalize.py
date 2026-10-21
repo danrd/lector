@@ -40,8 +40,9 @@ from llm_kit.prompt_builder import PromptBuilder, PromptingConfig
 PROMPTS_DIR = str(Path(__file__).parent / "prompts")
 
 # Greek, arrows, math operators/symbols, super/subscript digits, and the
-# few ASCII/Latin-1 characters that only show up in prose as notation.
-_NOTATION_RE = re.compile(r"[$`Ͱ-Ͽ←-⇿∀-⋿⁰-₟⟰-⟿²³¹×÷±^=<>]")
+# few ASCII/Latin-1 characters that only show up in prose as notation -
+# "/" included: TTS engines read "объединений/пересечений" as "косая черта".
+_NOTATION_RE = re.compile(r"[$`Ͱ-Ͽ←-⇿∀-⋿⁰-₟⟰-⟿²³¹×÷±^=<>/]")
 _WORD_RE = re.compile(r"\w+", re.UNICODE)
 _LEFTOVER_RE = re.compile(r"[$`]|\\[a-zA-Z]+")
 _JSON_FENCE_RE = re.compile(r"^\s*```(?:json)?\s*|\s*```\s*$")

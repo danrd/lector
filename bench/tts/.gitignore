@@ -1,0 +1,5 @@
+# Per-engine virtualenvs, downloaded weights and run outputs (audio of your
+# own voice included) - all regenerable, none of it belongs in git.
+.venvs/
+.cache/
+out/
