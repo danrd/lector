@@ -89,6 +89,8 @@ resumable task-processing loop).
   per-section tracks (see below).
 - **`lector/ffmpeg.py`** — decoding hosted TTS output (mp3 at any rate)
   into one WAV format, and encoding the final file.
+- **`lector/draft_note.py`** — a generated lecture as a draft note in
+  the vault's `_Inbox/` (the `lector` default).
 - **`lector/cli.py`** — the command-line entry point (`lector` or
   `python -m lector`): loads the vault, picks a TTS backend, runs the
   pipeline, and writes the WAV plus the narration script beside it. Pure
@@ -189,12 +191,28 @@ vault's core (~400 sections) is a job for a local GPU engine or a night.
 
 ## Generating a lecture on a topic
 
-Generating a lecture needs the `openrouter` extra (the CLI generates
-through OpenRouter) and a TTS backend:
+By default a generated lecture becomes a **draft note** in the vault's
+`_Inbox/` - to be read, fixed and moved into a real note, which
+lector-sync then voices like any other (it skips `_Inbox/`):
+
+```bash
+uv run lector "Неравенства Маркова и Чебышёва" --vault ~/KB --provider comet --language Russian
+# -> ~/KB/_Inbox/Неравенства Маркова и Чебышёва.md
+```
+
+The draft carries its review state: frontmatter `status: draft`,
+unresolved claims inline as `[NEEDS REVIEW: ...]`, the outcome of every
+checked claim at the end, and wikilinks to the vault notes it was
+grounded in. An existing draft on the same topic is never overwritten.
+`--provider comet` runs the text model through CometAPI
+(`claude-sonnet-4-6` by default) instead of OpenRouter.
+
+`--audio` keeps the original topic -> narrated WAV run, which needs a
+TTS backend:
 
 ```bash
 uv sync --extra openrouter --extra tts-local
-uv run lector "Galois theory" --vault ~/ObsidianVault --voice /path/to/voice.onnx
+uv run lector "Galois theory" --audio --vault ~/ObsidianVault --voice /path/to/voice.onnx
 ```
 
 `--vault` is optional: without it the lecture draws on the model's own

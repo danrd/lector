@@ -63,6 +63,32 @@ class LectureAudioResult:
     audio: Optional[AudioResult] = None
 
 
+@dataclass
+class LectureDraftResult:
+    """The text half of the pipeline: a draft with its flagged claims
+    checked. stage_reached is DRAFTING if the prompt didn't fit (nothing
+    else populated), DONE otherwise."""
+    stage_reached: PipelineStage
+    topic: str
+    draft: Optional[str] = None
+    verification_results: List[VerificationResult] = field(default_factory=list)
+    annotated_draft: Optional[str] = None
+
+
+def generate_lecture_draft(topic: str, notes: List[Note], tokenizer, runner,
+                           config: Optional[PipelineConfig] = None) -> LectureDraftResult:
+    """Draft and verify only - for when the lecture is going to be read
+    and edited as a note (lector.draft_note) rather than heard right away."""
+    config = config or PipelineConfig()
+    draft = draft_lecture(topic, notes, tokenizer, runner, config.lecture)
+    if draft is None:
+        return LectureDraftResult(stage_reached=PipelineStage.DRAFTING, topic=topic)
+    verification_results = verify_draft(draft, notes, tokenizer, runner, config.verification)
+    return LectureDraftResult(stage_reached=PipelineStage.DONE, topic=topic, draft=draft,
+                              verification_results=verification_results,
+                              annotated_draft=annotate_draft(draft, verification_results))
+
+
 def generate_lecture_audio(topic: str, notes: List[Note], tokenizer, runner,
                             tts_runner: BaseTTSRunner, output_path: str,
                             config: Optional[PipelineConfig] = None) -> LectureAudioResult:
@@ -74,12 +100,11 @@ def generate_lecture_audio(topic: str, notes: List[Note], tokenizer, runner,
     """
     config = config or PipelineConfig()
 
-    draft = draft_lecture(topic, notes, tokenizer, runner, config.lecture)
-    if draft is None:
+    drafted = generate_lecture_draft(topic, notes, tokenizer, runner, config)
+    if drafted.stage_reached == PipelineStage.DRAFTING:
         return LectureAudioResult(stage_reached=PipelineStage.DRAFTING, topic=topic)
-
-    verification_results = verify_draft(draft, notes, tokenizer, runner, config.verification)
-    annotated_draft = annotate_draft(draft, verification_results)
+    draft, verification_results = drafted.draft, drafted.verification_results
+    annotated_draft = drafted.annotated_draft
 
     narration_result = rewrite_for_narration(annotated_draft, tokenizer, runner, config.narration)
     # .strip(): a whitespace-only script is as unusable as an empty one and

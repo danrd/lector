@@ -1,9 +1,15 @@
-"""Command-line entry point: a topic in, a narrated WAV out.
+"""Command-line entry point: a topic in, a draft note (or, with --audio,
+a narrated WAV) out.
 
-Everything here is composition, not logic - loading the vault, picking a
-TTS backend, and reporting how far the run got. The pipeline itself
-(lector.pipeline.generate_lecture_audio) is unchanged and stays the only
-place that knows the stage order.
+By default the verified lecture is written as a draft note into the
+vault's `_Inbox/` (lector.draft_note): new content gets read and vetted
+before it joins the vault and the audio mirror (lector-sync), rather than
+going straight to the ears. --audio keeps the original topic -> speech
+run.
+
+Everything here is composition, not logic - loading the vault, picking
+backends, and reporting how far the run got. The stage order lives in
+lector.pipeline.
 
 Runnable as `lector` (the console script) or `python -m lector`.
 
@@ -25,12 +31,16 @@ from llm_kit.prompt_builder import ApproxTokenizer
 from lector.knowledge_base import Note, load_vault
 from lector.lecture import LectureConfig
 from lector.narration import NarrationConfig
-from lector.pipeline import PipelineConfig, PipelineStage, generate_lecture_audio
+from lector.pipeline import PipelineConfig, PipelineStage, generate_lecture_audio, generate_lecture_draft
 from lector.tts_runtime import BaseTTSRunner, SynthesisConfig
 
 PIPER = "piper"
 OPENAI = "openai"
 ORPHEUS = "orpheus"
+
+OPENROUTER = "openrouter"
+COMET = "comet"
+DEFAULT_MODELS = {OPENROUTER: "openai/gpt-4o-mini", COMET: "claude-sonnet-4-6"}
 
 
 def build_llm_runner(model: str, max_tokens: int):
@@ -63,6 +73,14 @@ def build_llm_runner(model: str, max_tokens: int):
         ) from exc
 
 
+def build_comet_llm_runner(model: str, max_tokens: int):
+    """The same model calls through CometAPI - one key for text and speech."""
+    from lector.read_cli import CometChatRunner, build_llm_runner as build_comet_runner
+
+    runner = build_comet_runner(model)
+    return CometChatRunner(model, runner.client, max_tokens=max_tokens)
+
+
 # Which extra to install, per backend, for the "you're missing a
 # dependency" message - a bare ModuleNotFoundError names a package the
 # user never chose by name (piper, snac, openai), not the extra they'd
@@ -71,6 +89,15 @@ _TTS_EXTRAS = {PIPER: "tts-local", OPENAI: "tts-cloud", ORPHEUS: "tts-orpheus"}
 
 
 def validate_args(args) -> None:
+    if not args.audio:
+        if not (args.vault or args.inbox):
+            raise SystemExit("A draft note needs somewhere to go: give --vault (drafts land in its "
+                             "_Inbox/) or --inbox, or pass --audio for the spoken lecture.")
+        return
+    _validate_tts_args(args)
+
+
+def _validate_tts_args(args) -> None:
     """Check what can be checked from the arguments alone, before any
     backend is constructed. Two backends need a local model file, and
     finding that out only after the LLM runner has already been built
@@ -127,6 +154,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--vault", default=None,
                         help="Path to an Obsidian vault. Omitted: the lecture draws on the "
                              "model's own knowledge only, and verification flags it as such.")
+    parser.add_argument("--audio", action="store_true",
+                        help="Narrate the lecture to a WAV instead of writing a draft note.")
+    parser.add_argument("--inbox", default=None,
+                        help="Folder for draft notes (default: <vault>/_Inbox).")
+    parser.add_argument("--provider", choices=[OPENROUTER, COMET], default=OPENROUTER,
+                        help="Where the text model runs (default: openrouter).")
     parser.add_argument("--output", default="lecture.wav",
                         help="Where to write the WAV (default: lecture.wav). The narration "
                              "script is written alongside it as .txt.")
@@ -137,8 +170,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "(default: alloy).")
     parser.add_argument("--speed", type=float, default=1.0,
                         help="Speaking-rate multiplier (default: 1.0).")
-    parser.add_argument("--model", default="openai/gpt-4o-mini",
-                        help="OpenRouter model used for drafting/verification/narration.")
+    parser.add_argument("--model", default=None,
+                        help="Text model for drafting/verification/narration (default: "
+                             + ", ".join(f"{k}: {v}" for k, v in DEFAULT_MODELS.items()) + ").")
     parser.add_argument("--max-tokens", type=int, default=4096,
                         help="Generation cap per LLM call (default: 4096).")
     parser.add_argument("--language", default=None,
@@ -197,7 +231,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         max_chunk_chars=args.max_chunk_chars,
     )
 
-    runner = build_llm_runner(args.model, args.max_tokens)
+    model = args.model or DEFAULT_MODELS[args.provider]
+    if args.provider == COMET:
+        runner = build_comet_llm_runner(model, args.max_tokens)
+    else:
+        runner = build_llm_runner(model, args.max_tokens)
+
+    if not args.audio:
+        return _write_draft(args, notes, runner, config, model)
+
     with build_tts_runner(args.tts, args.voice, args.speed) as tts_runner:
         result = generate_lecture_audio(
             args.topic, notes, ApproxTokenizer(), runner, tts_runner, args.output, config,
@@ -205,6 +247,26 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     return _report(result, args.output)
 
+
+def _write_draft(args, notes: List[Note], runner, config: PipelineConfig, model: str) -> int:
+    from lector.draft_note import INBOX_FOLDER, write_draft_note
+    from lector.knowledge_base import search_vault
+
+    result = generate_lecture_draft(args.topic, notes, ApproxTokenizer(), runner, config)
+    if result.stage_reached == PipelineStage.DRAFTING:
+        print(f"Stopped at drafting: the prompt for '{result.topic}' didn't fit its token limit.",
+              file=sys.stderr)
+        return 1
+
+    vault = Path(args.vault) if args.vault else None
+    inbox = Path(args.inbox) if args.inbox else vault / INBOX_FOLDER
+    sources = [hit.note for hit in search_vault(notes, args.topic, config=config.lecture.vault_search)]
+    path = write_draft_note(inbox, args.topic, result.annotated_draft, result.verification_results,
+                            sources, vault=vault, model=model)
+    uncertain = sum(r.verdict.value == "uncertain" for r in result.verification_results)
+    print(f"Wrote {path} ({len(sources)} vault note(s) used, {len(result.verification_results)} claim(s) "
+          f"checked, {uncertain} left marked NEEDS REVIEW)")
+    return 0
 
 if __name__ == "__main__":
     raise SystemExit(main())

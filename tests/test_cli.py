@@ -106,7 +106,7 @@ def test_vault_is_loaded_when_given(tmp_path):
 def test_main_passes_the_topic_and_output_through(wired, tmp_path):
     output = str(tmp_path / "out.wav")
 
-    exit_code = main(["Galois theory", "--tts", "openai", "--output", output])
+    exit_code = main(["Galois theory", "--audio", "--tts", "openai", "--output", output])
 
     assert exit_code == 0
     assert wired["topic"] == "Galois theory"
@@ -117,7 +117,7 @@ def test_language_reaches_both_lecture_and_narration(wired, tmp_path):
     """pipeline.py's docstring is explicit that these two are independent
     and not synced for you - so the CLI's single --language flag has to
     set both itself, or half the run comes out in the wrong language."""
-    main(["Topic", "--tts", "openai", "--language", "Russian", "--output", str(tmp_path / "o.wav")])
+    main(["Topic", "--audio", "--tts", "openai", "--language", "Russian", "--output", str(tmp_path / "o.wav")])
 
     config = wired["config"]
     assert config.lecture.language == "Russian"
@@ -125,13 +125,13 @@ def test_language_reaches_both_lecture_and_narration(wired, tmp_path):
 
 
 def test_max_chunk_chars_reaches_the_config(wired, tmp_path):
-    main(["Topic", "--tts", "openai", "--max-chunk-chars", "42", "--output", str(tmp_path / "o.wav")])
+    main(["Topic", "--audio", "--tts", "openai", "--max-chunk-chars", "42", "--output", str(tmp_path / "o.wav")])
 
     assert wired["config"].max_chunk_chars == 42
 
 
 def test_model_flag_reaches_the_llm_runner(wired, tmp_path):
-    main(["Topic", "--tts", "openai", "--model", "some/model", "--output", str(tmp_path / "o.wav")])
+    main(["Topic", "--audio", "--tts", "openai", "--model", "some/model", "--output", str(tmp_path / "o.wav")])
 
     assert wired["runner"] == "runner:some/model"
 
@@ -139,13 +139,13 @@ def test_model_flag_reaches_the_llm_runner(wired, tmp_path):
 def test_tts_runner_is_closed_even_though_the_pipeline_returned(wired, tmp_path):
     """The runner holds a loaded model - the CLI uses it as a context
     manager so it's released whether the run succeeded or not."""
-    main(["Topic", "--tts", "openai", "--output", str(tmp_path / "o.wav")])
+    main(["Topic", "--audio", "--tts", "openai", "--output", str(tmp_path / "o.wav")])
 
     assert wired["tts_runner"].closed is True
 
 
 def test_running_without_a_vault_passes_an_empty_note_list(wired, tmp_path):
-    main(["Topic", "--tts", "openai", "--output", str(tmp_path / "o.wav")])
+    main(["Topic", "--audio", "--tts", "openai", "--output", str(tmp_path / "o.wav")])
 
     assert wired["notes"] == []
 
@@ -155,7 +155,7 @@ def test_running_without_a_vault_passes_an_empty_note_list(wired, tmp_path):
 def test_a_completed_run_writes_the_script_beside_the_wav(wired, tmp_path):
     output = tmp_path / "lecture.wav"
 
-    exit_code = main(["Topic", "--tts", "openai", "--output", str(output)])
+    exit_code = main(["Topic", "--audio", "--tts", "openai", "--output", str(output)])
 
     assert exit_code == 0
     assert (tmp_path / "lecture.txt").read_text(encoding="utf-8") == "A spoken script."
@@ -170,7 +170,7 @@ def test_stopping_at_drafting_exits_nonzero(monkeypatch, tmp_path, capsys):
                         lambda *a, **k: LectureAudioResult(
                             stage_reached=PipelineStage.DRAFTING, topic="Topic"))
 
-    exit_code = main(["Topic", "--tts", "openai", "--output", str(tmp_path / "o.wav")])
+    exit_code = main(["Topic", "--audio", "--tts", "openai", "--output", str(tmp_path / "o.wav")])
 
     assert exit_code == 1
     assert "Stopped at drafting" in capsys.readouterr().err
@@ -187,7 +187,7 @@ def test_stopping_at_narration_exits_nonzero(monkeypatch, tmp_path, capsys):
                             stage_reached=PipelineStage.NARRATION, topic="Topic", draft="d",
                             narration=NarrationResult(script="")))
 
-    exit_code = main(["Topic", "--tts", "openai", "--output", str(tmp_path / "o.wav")])
+    exit_code = main(["Topic", "--audio", "--tts", "openai", "--output", str(tmp_path / "o.wav")])
 
     assert exit_code == 1
     assert "Stopped at narration" in capsys.readouterr().err
@@ -204,7 +204,7 @@ def test_unresolved_claims_are_reported_not_silently_dropped(monkeypatch, tmp_pa
     monkeypatch.setattr(cli, "generate_lecture_audio",
                         lambda *a, **k: _done_result(excluded=["a shaky fact"]))
 
-    main(["Topic", "--tts", "openai", "--output", str(tmp_path / "o.wav")])
+    main(["Topic", "--audio", "--tts", "openai", "--output", str(tmp_path / "o.wav")])
 
     assert "a shaky fact" in capsys.readouterr().err
 
@@ -217,7 +217,7 @@ def test_leftover_markdown_is_warned_about(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(cli, "generate_lecture_audio",
                         lambda *a, **k: _done_result(leftover=True))
 
-    main(["Topic", "--tts", "openai", "--output", str(tmp_path / "o.wav")])
+    main(["Topic", "--audio", "--tts", "openai", "--output", str(tmp_path / "o.wav")])
 
     assert "still contains markdown" in capsys.readouterr().err
 
@@ -228,20 +228,20 @@ def test_piper_requires_a_voice_path():
     from lector.cli import build_parser, validate_args
 
     with pytest.raises(SystemExit, match="--voice is required"):
-        validate_args(build_parser().parse_args(["Topic", "--tts", "piper"]))
+        validate_args(build_parser().parse_args(["Topic", "--audio", "--tts", "piper"]))
 
 
 def test_orpheus_requires_a_model_path():
     from lector.cli import build_parser, validate_args
 
     with pytest.raises(SystemExit, match="--voice is required"):
-        validate_args(build_parser().parse_args(["Topic", "--tts", "orpheus"]))
+        validate_args(build_parser().parse_args(["Topic", "--audio", "--tts", "orpheus"]))
 
 
 def test_openai_backend_needs_no_local_model_file():
     from lector.cli import build_parser, validate_args
 
-    validate_args(build_parser().parse_args(["Topic", "--tts", "openai"]))  # must not raise
+    validate_args(build_parser().parse_args(["Topic", "--audio", "--tts", "openai"]))  # must not raise
 
 
 def test_missing_voice_is_reported_before_anything_is_constructed(monkeypatch):
@@ -259,7 +259,7 @@ def test_missing_voice_is_reported_before_anything_is_constructed(monkeypatch):
     monkeypatch.setattr(cli, "build_tts_runner", must_not_be_called)
 
     with pytest.raises(SystemExit, match="--voice is required"):
-        cli.main(["Topic", "--tts", "piper"])
+        cli.main(["Topic", "--audio", "--tts", "piper"])
 
 
 def test_a_missing_tts_extra_names_the_extra_not_the_package(monkeypatch):
@@ -286,3 +286,52 @@ def test_missing_openrouter_key_is_a_clear_error(monkeypatch):
 
     with pytest.raises(SystemExit, match="OPENROUTER_API_KEY"):
         build_llm_runner("some/model", 1024)
+
+
+# -- draft-note mode (the default) -----------------------------------------
+
+def test_draft_mode_needs_a_vault_or_inbox():
+    from lector.cli import validate_args
+
+    with pytest.raises(SystemExit, match="_Inbox"):
+        validate_args(build_parser().parse_args(["Topic"]))
+
+
+def test_draft_mode_does_not_need_a_voice():
+    from lector.cli import validate_args
+
+    validate_args(build_parser().parse_args(["Topic", "--inbox", "x", "--tts", "piper"]))  # must not raise
+
+
+def test_draft_mode_writes_into_the_vault_inbox(monkeypatch, tmp_path, capsys):
+    import lector.cli as cli
+    from lector.pipeline import LectureDraftResult
+
+    (tmp_path / "Math").mkdir()
+    (tmp_path / "Math" / "Galois.md").write_text("---\ntitle: Galois theory\n---\nGalois theory groups fields.",
+                                                encoding="utf-8")
+    monkeypatch.setattr(cli, "build_llm_runner", lambda model, max_tokens: object())
+    monkeypatch.setattr(cli, "build_tts_runner", lambda *a: pytest.fail("no TTS in draft mode"))
+    monkeypatch.setattr(cli, "generate_lecture_draft", lambda topic, *a, **k: LectureDraftResult(
+        stage_reached=PipelineStage.DONE, topic=topic, draft="d", annotated_draft="## Body\nText."))
+
+    assert main(["Galois theory", "--vault", str(tmp_path)]) == 0
+
+    draft = (tmp_path / "_Inbox" / "Galois theory.md").read_text(encoding="utf-8")
+    assert "status: draft" in draft and "## Body" in draft
+    assert "[[Math/Galois|Galois theory]]" in draft
+    assert "Wrote" in capsys.readouterr().out
+
+
+def test_comet_provider_uses_its_own_default_model(monkeypatch, tmp_path):
+    import lector.cli as cli
+    from lector.pipeline import LectureDraftResult
+
+    seen = {}
+    monkeypatch.setattr(cli, "build_comet_llm_runner", lambda model, max_tokens: seen.setdefault("model", model))
+    monkeypatch.setattr(cli, "generate_lecture_draft", lambda topic, *a, **k: LectureDraftResult(
+        stage_reached=PipelineStage.DONE, topic=topic, annotated_draft="x"))
+
+    main(["Topic", "--inbox", str(tmp_path), "--provider", "comet"])
+
+    assert seen["model"] == "claude-sonnet-4-6"
