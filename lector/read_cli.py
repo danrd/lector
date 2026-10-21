@@ -144,10 +144,31 @@ def default_output(stem: str, sections: Sequence[str]) -> Path:
     return Path(f"{safe}.mp3")
 
 
-def build_llm_runner(model: str):
-    """A chat model through CometAPI's OpenAI-compatible endpoint, wrapped
-    in llm_kit's OpenRouterRunner - which takes any OpenAI client, so the
-    same key that pays for speech pays for this too."""
+class CometChatRunner:
+    """The one-method llm_kit Runner interface (generate(prompt) -> str)
+    over CometAPI's OpenAI-compatible chat endpoint.
+
+    Not llm_kit's OpenRouterRunner, deliberately: that always sends
+    temperature/top_p, and through CometAPI's Bedrock route Claude models
+    then end with finish_reason "length" and an empty answer (Sonnet 4.6),
+    or refuse the request outright (Opus 4.8: "temperature is
+    deprecated"). Only max_tokens is sent here."""
+
+    def __init__(self, model: str, client, max_tokens: int = 4096):
+        self.model = model
+        self.client = client
+        self.max_tokens = max_tokens
+
+    def generate(self, prompt: str) -> str:
+        response = self.client.chat.completions.create(
+            model=self.model, messages=[{"role": "user", "content": prompt}], max_tokens=self.max_tokens,
+        )
+        return response.choices[0].message.content or ""
+
+
+def build_llm_runner(model: str) -> CometChatRunner:
+    """A chat model through CometAPI, so the same key that pays for speech
+    pays for this too."""
     from lector.tts_runtime import comet_api_key
 
     try:
@@ -155,16 +176,12 @@ def build_llm_runner(model: str):
     except ImportError as exc:
         raise SystemExit("Reading formulas with a model needs the openai package: "
                          "uv sync --extra comet (or pass --formulas raw).") from exc
-    from llm_kit.llm_runtime import GenerationConfig, OpenRouterRunner
-
     try:
         api_key = comet_api_key()
     except ValueError as exc:
         raise SystemExit(f"{exc} - see .env.example, or pass --formulas raw.") from exc
     client = OpenAI(base_url=f"{COMET_BASE_URL}/v1", api_key=api_key, timeout=180.0, max_retries=2)
-    # seed=None: not every model behind CometAPI accepts one.
-    generation_kwargs = GenerationConfig(max_tokens=4096).to_chat_completions(seed=None)
-    return OpenRouterRunner(models=[model], generation_kwargs=generation_kwargs, client=client)
+    return CometChatRunner(model, client)
 
 
 def comet_model(args) -> str:
@@ -278,8 +295,9 @@ def _report_preparation(cleaned, verbalization: VerbalizationResult, script_path
         print(f"Warning: {len(verbalization.drifted)} line(s) changed more than their formulas - "
               f"see {review_path}.", file=sys.stderr)
     if verbalization.failed:
-        print(f"Warning: {len(verbalization.failed)} line(s) couldn't be verbalized and keep raw notation.",
-              file=sys.stderr)
+        reasons = "; ".join(sorted(set(verbalization.errors))) or "unknown"
+        print(f"Warning: {len(verbalization.failed)} line(s) couldn't be verbalized and keep raw notation "
+              f"({reasons}).", file=sys.stderr)
     if verbalization.has_leftover_notation:
         print("Warning: some notation ($, `, \\command) is still in the script.", file=sys.stderr)
 

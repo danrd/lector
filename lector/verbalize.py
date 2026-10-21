@@ -67,6 +67,7 @@ class VerbalizationResult:
     rewritten: List[Tuple[str, str]] = field(default_factory=list)  # (original, spoken) per changed line
     drifted: List[Tuple[str, str]] = field(default_factory=list)    # rewrites that lost ordinary words
     failed: List[str] = field(default_factory=list)                 # lines the model never returned usably
+    errors: List[str] = field(default_factory=list)                 # model-call errors behind those failures
 
     @property
     def has_leftover_notation(self) -> bool:
@@ -123,18 +124,27 @@ def _parse_lines(output: str, expected: int) -> Optional[List[str]]:
     return parsed
 
 
-def _verbalize_batch(batch: List[str], tokenizer, runner, config: VerbalizeConfig) -> Optional[List[str]]:
+def _verbalize_batch(batch: List[str], tokenizer, runner,
+                     config: VerbalizeConfig) -> Tuple[Optional[List[str]], Optional[str]]:
     """One model call for `batch`, retried once on an unusable answer (bad
-    JSON, wrong line count). None if both attempts fail or the prompt
-    doesn't fit token_limit."""
+    JSON, wrong line count, an API error). Returns (lines, None), or
+    (None, why) if both attempts fail or the prompt doesn't fit
+    token_limit - a failed batch costs only its own lines, never the run."""
     prompt = build_verbalize_prompt(batch, tokenizer, config)
     if prompt is None:
-        return None
+        return None, "prompt over token_limit"
+    error = "unusable answer"
     for _ in range(2):
-        parsed = _parse_lines(runner.generate(prompt), len(batch))
+        try:
+            answer = runner.generate(prompt)
+        except Exception as exc:  # noqa: BLE001 - any API failure fails just this batch
+            error = f"{type(exc).__name__}: {exc}"
+            continue
+        parsed = _parse_lines(answer, len(batch))
         if parsed is not None:
-            return parsed
-    return None
+            return parsed, None
+        error = "empty answer" if not (answer or "").strip() else "unusable answer"
+    return None, error
 
 
 def verbalize_lines(lines: List[str], tokenizer, runner,
@@ -148,14 +158,16 @@ def verbalize_lines(lines: List[str], tokenizer, runner,
     indices = [i for i, line in enumerate(lines) if needs_verbalization(line)]
     batches = [indices[i:i + config.batch_size] for i in range(0, len(indices), config.batch_size)]
 
-    def run(batch_indices: List[int]) -> Optional[List[str]]:
+    def run(batch_indices: List[int]) -> Tuple[Optional[List[str]], Optional[str]]:
         return _verbalize_batch([lines[i] for i in batch_indices], tokenizer, runner, config)
 
     with ThreadPoolExecutor(max_workers=config.max_workers) as pool:
         outputs = list(pool.map(run, batches))
 
     result = VerbalizationResult(lines=list(lines))
-    for batch_indices, output in zip(batches, outputs):
+    for batch_indices, (output, error) in zip(batches, outputs):
+        if error is not None:
+            result.errors.append(error)
         for position, index in enumerate(batch_indices):
             original = lines[index]
             if output is None:

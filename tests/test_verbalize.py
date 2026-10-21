@@ -152,3 +152,28 @@ def test_preserves_prose_ignores_the_formula_words_themselves():
 
 def test_strip_notation_markup_keeps_span_content():
     assert strip_notation_markup("use `numpy` and $x+1$  now") == "use numpy and x+1 now"
+
+
+class _FailingRunner:
+    def __init__(self):
+        self.calls = 0
+
+    def generate(self, prompt):
+        self.calls += 1
+        raise RuntimeError("HTTP 400")
+
+
+def test_api_error_fails_only_its_batch_and_is_reported():
+    lines = ["a $x$.", "b $y$."]
+
+    result = _verbalize(lines, _FailingRunner(), batch_size=1)
+
+    assert result.failed == lines
+    assert result.lines == ["a x.", "b y."]
+    assert result.errors == ["RuntimeError: HTTP 400", "RuntimeError: HTTP 400"]
+
+
+def test_empty_answer_is_reported_as_such():
+    result = _verbalize(["a $x$."], _TableRunner(raw_answers=["", ""]))
+
+    assert result.errors == ["empty answer"]
