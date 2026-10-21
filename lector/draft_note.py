@@ -73,7 +73,9 @@ def render_draft_note(topic: str, annotated_draft: str, verification: Sequence[V
         "",
         f"# {topic}",
         "",
-        "> [!warning] Черновик lector",
+        # Own callout type: renders like a note box, and lector-read/sync
+        # know to skip it (lector.obsidian's skip_callouts).
+        "> [!lector] Черновик lector",
         "> Сгенерирован автоматически"
         + (f", опирается на {len(sources)} заметок хранилища" if sources else ", без опоры на заметки хранилища")
         + f". Проверено утверждений: {len(verification)}, осталось под вопросом: {uncertain}"

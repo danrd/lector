@@ -109,6 +109,9 @@ def build_parser() -> argparse.ArgumentParser:
                              "Default: <note>[-<section>].mp3 in the current directory.")
     parser.add_argument("--script-only", action="store_true",
                         help="Prepare and write the script (and formula review) without synthesizing.")
+    parser.add_argument("--album", default="Lector",
+                        help="Album tag of the audio file - the 'book' an audiobook player files it under "
+                             "(default: Lector). The title tag is the note title.")
 
     add_voice_arguments(parser)
     return parser
@@ -312,7 +315,7 @@ def _report_preparation(cleaned, verbalization: VerbalizationResult, script_path
         print("Warning: some notation ($, `, \\command) is still in the script.", file=sys.stderr)
 
 
-def synthesize(args, script: str, output: Path) -> None:
+def synthesize(args, script: str, output: Path, title: Optional[str] = None) -> None:
     tts = build_tts(args)
     if not args.no_cache:
         tts = CachedTTSRunner(tts, args.cache_dir, cache_namespace(args))
@@ -326,7 +329,8 @@ def synthesize(args, script: str, output: Path) -> None:
         if wav_path != output:
             from lector.ffmpeg import encode_audio
 
-            encode_audio(wav_path, output)
+            encode_audio(wav_path, output, {"title": title or output.stem, "album": args.album,
+                                            "artist": "lector", "album_artist": "lector", "genre": "Speech"})
 
     cached = f", {tts.hits} from cache" if isinstance(tts, CachedTTSRunner) and tts.hits else ""
     minutes, seconds = divmod(round(result.duration_seconds), 60)
@@ -342,9 +346,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         if not script_path.is_file():
             raise SystemExit(f"Script not found: {args.script}")
         script = script_path.read_text(encoding="utf-8")
+        title = script_path.stem
         output = Path(args.output) if args.output else script_path.with_suffix(".mp3")
     else:
         note_path = resolve_note(args.note, args.vault)
+        from lector.sync import note_title
+
+        title = note_title(parse_note(note_path))
+        if args.section:
+            title = f"{title}: {', '.join(args.section)}"
         prepared = prepare_script(args, note_path)
         if prepared is None:
             return 0
@@ -367,7 +377,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if not script.strip():
         raise SystemExit("The script is empty - nothing to synthesize.")
-    synthesize(args, script, output)
+    synthesize(args, script, output, title)
     return 0
 
 

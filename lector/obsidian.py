@@ -12,7 +12,10 @@ What happens to each construct:
   are dropped - there's nothing to read.
 - Callouts lose their "> [!type]" markup; their body is read as normal
   text, except for the types in `skip_callouts` (by default "map", this
-  vault's navigation box, which is a list of links, not content).
+  vault's navigation box, which is a list of links, not content, and
+  "lector", the banner of a generated draft note).
+- `[NEEDS REVIEW: ...]` claims of a generated draft are dropped: unverified
+  statements aren't read out as fact.
 - Code blocks and tables are skipped entirely - read aloud they are noise
   - and counted, so the caller can say what was left out.
 - Bold/italic/highlight/strikethrough markers, inline #tags, footnote
@@ -46,6 +49,9 @@ _URL_RE = re.compile(r"https?://\S+")
 _FOOTNOTE_RE = re.compile(r"\[\^[^\]]+\]")
 _HTML_TAG_RE = re.compile(r"</?[a-zA-Z][^>]*>")
 _COMMENT_RE = re.compile(r"%%.*?%%|<!--.*?-->")
+# lector's own draft markers (lector/draft_note.py): an unresolved claim is
+# exactly what must not be read aloud as if it were fact.
+_NEEDS_REVIEW_RE = re.compile(r"\s*\[NEEDS REVIEW:.*?\]", re.DOTALL)
 _EMPHASIS_RES = [
     re.compile(r"\*\*(.+?)\*\*"), re.compile(r"__(.+?)__"),
     re.compile(r"==(.+?)=="), re.compile(r"~~(.+?)~~"),
@@ -125,7 +131,9 @@ def _match_headings(headings: List[Heading], name: str) -> List[Heading]:
 
 # Per-section link lists in this vault ("### 🔗 Sources" under nearly every
 # subtopic) - read aloud they're a string of titles and URLs, not content.
-DEFAULT_EXCLUDED_SECTIONS = ("источники", "sources", "ресурсы", "resources")
+DEFAULT_EXCLUDED_SECTIONS = ("источники", "sources", "ресурсы", "resources",
+                             # the bookkeeping tail of a lector draft note
+                             "проверка утверждений", "опора на заметки")
 
 
 def _section_end(headings: List[Heading], heading: Heading, total_lines: int) -> int:
@@ -221,10 +229,10 @@ def _finish_sentence(text: str) -> str:
     return text
 
 
-def clean_markdown(markdown: str, skip_callouts: Sequence[str] = ("map",)) -> CleanedNote:
+def clean_markdown(markdown: str, skip_callouts: Sequence[str] = ("map", "lector")) -> CleanedNote:
     """Strip `markdown` (a note body, frontmatter already removed) down to
     speakable lines - see the module docstring for what happens to what."""
-    markdown = _COMMENT_RE.sub("", markdown)
+    markdown = _NEEDS_REVIEW_RE.sub("", _COMMENT_RE.sub("", markdown))
     skip = {name.casefold() for name in skip_callouts}
 
     lines: List[str] = []

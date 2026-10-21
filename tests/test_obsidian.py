@@ -174,3 +174,17 @@ def test_rules_tag_lines_and_comments_are_dropped():
 
 def test_symbol_only_lines_are_dropped():
     assert clean_markdown("📚\n-\nReal.\n").lines == ["Real."]
+
+
+def test_lector_draft_banner_review_markers_and_bookkeeping_are_not_read():
+    from lector.obsidian import select_sections
+
+    draft = (
+        "> [!lector] Черновик lector\n> Сгенерирован автоматически.\n\n"
+        "## Идея\nФакт. Спорный факт [NEEDS REVIEW: дата 1900 - неясно]. Ещё факт.\n\n"
+        "## Проверка утверждений\n- ❓ требует проверки: дата\n\n## Опора на заметки\n- [[X]]\n"
+    )
+
+    lines = clean_markdown(select_sections(draft)).lines
+
+    assert lines == ["Идея.", "Факт. Спорный факт. Ещё факт."]
