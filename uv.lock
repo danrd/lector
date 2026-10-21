@@ -1757,6 +1757,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+comet = [
+    { name = "openai" },
+]
 hf = [
     { name = "toolkit", extra = ["llm-kit-hf"] },
 ]
@@ -1798,6 +1801,7 @@ requires-dist = [
     { name = "jinja2" },
     { name = "lector", extras = ["llama-cpp"], marker = "extra == 'test'" },
     { name = "llama-cpp-python", extras = ["server"], marker = "extra == 'tts-orpheus'" },
+    { name = "openai", marker = "extra == 'comet'" },
     { name = "openai", marker = "extra == 'tts-cloud'" },
     { name = "piper-tts", marker = "extra == 'tts-local'" },
     { name = "pydantic" },
@@ -1812,7 +1816,7 @@ requires-dist = [
     { name = "toolkit", extras = ["llm-kit-vllm"], marker = "extra == 'vllm'", git = "https://github.com/danrd/toolkit.git" },
     { name = "torch", marker = "extra == 'tts-orpheus'" },
 ]
-provides-extras = ["llama-cpp", "vllm", "openrouter", "hf", "tts-local", "tts-cloud", "tts-orpheus", "logging", "test"]
+provides-extras = ["llama-cpp", "vllm", "openrouter", "hf", "tts-local", "tts-cloud", "comet", "tts-orpheus", "logging", "test"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "ruff" }]

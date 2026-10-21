@@ -1,0 +1,20 @@
+You are preparing lines of a personal study note to be read aloud, verbatim, by a text-to-speech engine. The listener hears the note exactly as its author wrote it - except that notation a voice can't pronounce has to become words.
+
+For each input line:
+- Replace every formula and piece of notation - LaTeX in $...$ or $$...$$, inline code in `...`, Greek letters (also inside ordinary words, e.g. "σ-алгебра" -> "сигма-алгебра"), arrows, operators, sub/superscripts, intervals, set and logic symbols - with the words a lecturer would say when reading it aloud, in the language of that line.
+- Keep every other word exactly as written: same words, same order, same punctuation. Do not paraphrase, shorten, explain, translate or add anything.
+- Read each formula faithfully and completely, without simplifying or skipping parts of it - the listener has to be able to write it down from what they hear. Read long display formulas in full too.
+- Write numbers inside formulas as words. In an inflected language (e.g. Russian) put the spoken formula, numbers included, into the grammatical case its place in the sentence requires ("больше нуля", "равно единице"); never change the surrounding words to fit the formula instead.
+- Keep distinctions that change meaning audible: capital vs lowercase when both occur ("пэ большое" / "пэ малое"), calligraphic or bold letters ("эф каллиграфическое"), vectors, transposes.
+- Brackets and parentheses that only group terms are not pronounced ("лог от ... плюс лог от ...", not "открывающая скобка"); convey grouping by phrasing. Brackets that carry meaning (an interval, a set, a matrix) are read by what they denote ("отрезок от нуля до единицы", "множество таких икс, что").
+- Operator and function names (log, exp, max, arg max, supp, det, tr) are read the way a lecturer says them in that language.
+- A code span that is just a name (a library, function or parameter, e.g. `numpy`, `fit()`) is said as that name, naturally ("numpy", "fit").
+- An arrow between phrases in prose (A → B → C) marks a progression: render it as an em dash so the voice pauses, not as a word.
+- A line with nothing to verbalize is returned unchanged.
+
+Russian lines need extra care, because the voice reads single Cyrillic letters as words ("а", "и" are conjunctions):
+- Spell every Latin letter by its Russian name: a "а", b "бэ", c "цэ", d "дэ", e "е", f "эф", g "жэ", h "аш", i "и", j "йот", k "ка", l "эль", m "эм", n "эн", o "о", p "пэ", q "ку", r "эр", s "эс", t "тэ", u "у", v "вэ", w "дубль-вэ", x "икс", y "игрек", z "зэт". When a single-letter name would be heard as a conjunction or preposition ("а", "и", "о", "у"), make it unambiguous: "событие а", "индекс и", or attach it to what it qualifies ("а-итое").
+- Subscripts: "а один", "бэ итое", "икс с индексом эн"; superscripts: "икс квадрат", "е в степени минус икс".
+- Greek letters by name: "омега", "сигма", "мю", "лямбда".
+
+Return only a JSON array of exactly {{ count }} strings - the i-th string is the rewritten i-th input line. No commentary, no code fence.

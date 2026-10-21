@@ -145,3 +145,42 @@ def test_concatenate_wavs_refuses_an_empty_chunk_list(tmp_path):
 
     with pytest.raises(ValueError, match="Nothing to concatenate"):
         _concatenate_wavs([], output_path)
+
+
+
+def _make_marked_wav_bytes(num_frames: int, marker: int, framerate: int = 16000) -> bytes:
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(framerate)
+        wav_file.writeframes(marker.to_bytes(2, "little") * num_frames)
+    return buffer.getvalue()
+
+
+class _SlowFirstRunner(BaseTTSRunner):
+    """Makes the first chunk finish last, so a parallel run that wrote
+    chunks in completion order instead of text order would be caught.
+    Every sample of a chunk carries that chunk's marker value."""
+    def __init__(self):
+        import threading
+        self.first_may_finish = threading.Event()
+
+    def synthesize(self, text: str) -> bytes:
+        if text.startswith("First"):
+            self.first_may_finish.wait(timeout=5)
+            return _make_marked_wav_bytes(10, marker=1)
+        self.first_may_finish.set()
+        return _make_marked_wav_bytes(10, marker=2)
+
+
+def test_synthesize_long_text_in_parallel_keeps_text_order(tmp_path):
+    output_path = str(tmp_path / "out.wav")
+
+    result = synthesize_long_text("First one. Second sentence here.", _SlowFirstRunner(), output_path,
+                                  max_chunk_chars=5, max_workers=2)
+
+    assert result.num_chunks == 2
+    with wave.open(output_path, "rb") as wav_file:
+        frames = wav_file.readframes(wav_file.getnframes())
+    assert frames == (1).to_bytes(2, "little") * 10 + (2).to_bytes(2, "little") * 10

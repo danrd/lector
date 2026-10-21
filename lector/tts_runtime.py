@@ -25,6 +25,13 @@ implementation (github.com/Zuellni/Orpheus-GGUF), not yet run end to
 end against real Orpheus GGUF + SNAC checkpoints - treat as a starting
 point to validate once those are downloaded, not as confirmed-working.
 
+CometTTSRunner is the hosted option that does both quality and cloning:
+CometAPI's Runway-format speech route, with ElevenLabs preset voices
+(the most natural prosody tried so far) or seed_audio cloning a voice
+from a short local recording. Verified end to end against the live API
+on Russian vault notes. CachedTTSRunner wraps any backend so a re-run
+only pays for chunks whose text changed.
+
 Heavy/optional dependencies (piper, openai, llama_cpp, torch, snac) are
 imported lazily inside whichever class actually needs them, so
 importing this module never requires every backend's library to be
@@ -134,7 +141,7 @@ class OpenAITTSRunner(BaseTTSRunner):
 
     def __init__(self, voice: str = "alloy", model: str = "gpt-4o-mini-tts",
                  config: Optional[SynthesisConfig] = None,
-                 api_key: Optional[str] = None, client=None):
+                 api_key: Optional[str] = None, client=None, base_url: Optional[str] = None):
         self.voice = voice
         self.model = model
         self.config = config or SynthesisConfig()
@@ -144,7 +151,9 @@ class OpenAITTSRunner(BaseTTSRunner):
             if not api_key:
                 raise ValueError("OPENAI_API_KEY is not set")
             from openai import OpenAI
-            self._client = OpenAI(api_key=api_key)
+            # base_url: any OpenAI-compatible /audio/speech host - e.g.
+            # CometAPI (see build_comet_runner) - not just OpenAI itself.
+            self._client = OpenAI(api_key=api_key, base_url=base_url)
 
     def synthesize(self, text: str) -> bytes:
         response = self._client.audio.speech.create(
@@ -286,3 +295,268 @@ def build_orpheus_runner(model_path: str, device: str = "cpu",
     return OrpheusRunner(llama, snac_model, snac_device=snac_device, voice=voice,
                           reference_audio=reference_audio, reference_transcript=reference_transcript,
                           config=config)
+
+
+# ---------------------------------------------------------------------------
+# Hosted backend (voice cloning) - CometAPI's /runwayml/v1/text_to_speech.
+# ---------------------------------------------------------------------------
+
+COMET_BASE_URL = "https://api.cometapi.com"
+
+# OpenAI's own speech models on CometAPI go through the synchronous,
+# OpenAI-compatible /v1/audio/speech instead - see build_comet_runner.
+COMET_OPENAI_MODELS = ("tts-1", "tts-1-hd", "gpt-4o-mini-tts")
+COMET_PRESET_MODELS = ("eleven_v3", "eleven_v4", "eleven_multilingual_v2")
+COMET_CLONING_MODEL = "seed_audio"
+
+# Longest text each model accepts per request is 1000 (multilingual_v2),
+# 5000 (v3), unlimited (v4) and 2048 (seed_audio) characters; these sit
+# well below that - shorter chunks also mean more of them run in
+# parallel, and each request takes about a minute whatever its length.
+# seed_audio's is much lower than its documented limit for a measured
+# reason: its output stops at roughly a minute of speech and silently
+# drops the rest of the text (1500-character Russian chunks came back as
+# ~54 s clips missing a third of their words), so a chunk has to stay
+# well under a minute of reading - ~500 characters is ~30 s.
+COMET_MAX_CHUNK_CHARS = {
+    "eleven_multilingual_v2": 900, "eleven_v3": 1500, "eleven_v4": 1500, "seed_audio": 500,
+}
+
+_REFERENCE_MAX_BYTES = 5 * 1024 * 1024
+_REFERENCE_MIME = {".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg",
+                   ".m4a": "audio/mp4", ".flac": "audio/flac", ".webm": "audio/webm"}
+
+
+def comet_api_key(api_key: Optional[str] = None) -> str:
+    """CometAPI's own docs call the variable COMETAPI_KEY; accept that
+    spelling too, not only COMET_API_KEY."""
+    api_key = api_key or os.environ.get("COMET_API_KEY") or os.environ.get("COMETAPI_KEY")
+    if not api_key:
+        raise ValueError("COMET_API_KEY is not set")
+    return api_key
+
+
+def detect_language(text: str) -> str:
+    """"ru" or "en" by which alphabet dominates `text` - all the vault is
+    written in, and enough for ElevenLabs' languageCode hint."""
+    letters = [ch for ch in text if ch.isalpha()]
+    if not letters:
+        return "en"
+    cyrillic = sum("Ѐ" <= ch <= "ӿ" for ch in letters)
+    return "ru" if cyrillic / len(letters) >= 0.3 else "en"
+
+
+def reference_audio_data_uri(path: str) -> str:
+    """A local recording as the base64 data URI seed_audio accepts as a
+    voice reference - so cloning needs no hosting of the sample."""
+    import base64
+    from pathlib import Path
+
+    suffix = Path(path).suffix.lower()
+    if suffix not in _REFERENCE_MIME:
+        raise ValueError(f"Unsupported reference audio format {suffix!r} "
+                         f"(expected one of {', '.join(sorted(_REFERENCE_MIME))})")
+    data = Path(path).read_bytes()
+    if len(data) > _REFERENCE_MAX_BYTES:
+        raise ValueError(f"Reference audio is {len(data) / 2**20:.1f} MB; the API accepts at most 5 MB "
+                         "- a 15-30 second clip is plenty.")
+    return f"data:{_REFERENCE_MIME[suffix]};base64,{base64.b64encode(data).decode('ascii')}"
+
+
+class CometHTTPError(RuntimeError):
+    def __init__(self, status: int, body: str):
+        self.status = status
+        self.body = body
+        super().__init__(f"CometAPI returned HTTP {status}: {body[:500]}")
+
+
+class _UrllibTransport:
+    """The three HTTP calls CometTTSRunner makes, on the stdlib alone -
+    swapped for a fake in tests."""
+
+    def __init__(self, api_key: str, base_url: str = COMET_BASE_URL, timeout: float = 120.0):
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+
+    def _request(self, method: str, url: str, body: Optional[dict] = None, auth: bool = True) -> bytes:
+        import json
+        import urllib.error
+        import urllib.request
+
+        headers = {"Content-Type": "application/json"}
+        if auth:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        request = urllib.request.Request(
+            url, method=method, headers=headers,
+            data=json.dumps(body).encode("utf-8") if body is not None else None,
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                return response.read()
+        except urllib.error.HTTPError as exc:
+            raise CometHTTPError(exc.code, exc.read().decode("utf-8", errors="replace")) from exc
+
+    def post_json(self, path: str, body: dict) -> dict:
+        import json
+        return json.loads(self._request("POST", self.base_url + path, body))
+
+    def get_json(self, path: str) -> dict:
+        import json
+        return json.loads(self._request("GET", self.base_url + path))
+
+    def download(self, url: str) -> bytes:
+        # Result URLs are pre-signed storage links - no API key goes there.
+        return self._request("GET", url, auth=False)
+
+
+class CometTTSRunner(BaseTTSRunner):
+    """Speech through CometAPI's Runway-format TTS route: submit a task,
+    poll it, download the result, decode it to WAV.
+
+    Two kinds of voice, by model:
+    - `eleven_v3` / `eleven_v4` / `eleven_multilingual_v2` (ElevenLabs) -
+      one of Runway's preset voices, `voice="Bernard"` etc. Best prosody;
+      no cloning on this route.
+    - `seed_audio` - the default voice, or a cloned one: pass
+      `reference_audio` (path to a short clean recording of the target
+      voice, sent inline as base64; no transcript needed).
+
+    Every chunk is decoded to the same mono 24 kHz WAV (lector.ffmpeg),
+    whatever container the service returned, so lector.audio's
+    concatenation never sees mismatched formats. synthesize() keeps no
+    per-call state, so lector.audio may call it from several threads -
+    which matters here, since one request takes about a minute.
+    """
+
+    def __init__(self, model: str = "eleven_v3", voice: Optional[str] = None,
+                 reference_audio: Optional[str] = None, language: Optional[str] = None,
+                 config: Optional[SynthesisConfig] = None, api_key: Optional[str] = None,
+                 transport=None, poll_interval: float = 3.0, task_timeout: float = 600.0,
+                 sample_rate: int = 24000):
+        if model not in (*COMET_PRESET_MODELS, COMET_CLONING_MODEL):
+            raise ValueError(f"Unknown CometAPI speech model {model!r}")
+        if reference_audio is not None and model != COMET_CLONING_MODEL:
+            raise ValueError(f"Voice cloning needs model={COMET_CLONING_MODEL!r}; {model} only has preset voices")
+        if model in COMET_PRESET_MODELS and not voice:
+            raise ValueError(f"{model} needs a preset voice name (e.g. 'Bernard')")
+
+        self.model = model
+        self.voice = voice
+        self.language = language
+        self.config = config or SynthesisConfig()
+        self.poll_interval = poll_interval
+        self.task_timeout = task_timeout
+        self.sample_rate = sample_rate
+        self._reference_uri = reference_audio_data_uri(reference_audio) if reference_audio else None
+        self._transport = transport or _UrllibTransport(comet_api_key(api_key))
+
+    def build_request(self, text: str) -> dict:
+        body: dict = {"model": self.model, "promptText": text}
+        speed = self.config.speed
+        if self.model == COMET_CLONING_MODEL:
+            if self._reference_uri:
+                body["voice"] = {"type": "reference-audio", "audioUri": self._reference_uri}
+            # speechRate is a -50..100 percentage offset from normal speed.
+            rate = max(-50, min(100, round((speed - 1.0) * 100)))
+            if rate:
+                body["speechRate"] = rate
+            body["outputFormat"] = "wav"
+            body["sampleRate"] = self.sample_rate
+        else:
+            body["voice"] = {"type": "runway-preset", "presetId": self.voice}
+            if speed != 1.0:
+                body["speed"] = max(0.7, min(1.2, speed))
+            if self.model != "eleven_multilingual_v2":
+                body["languageCode"] = self.language or detect_language(text)
+        return body
+
+    def _wait_for(self, task_id: str) -> dict:
+        import time
+
+        deadline = time.monotonic() + self.task_timeout
+        while time.monotonic() < deadline:
+            time.sleep(self.poll_interval)
+            try:
+                task = self._transport.get_json(f"/runwayml/v1/tasks/{task_id}")
+            except CometHTTPError as exc:
+                # A just-submitted task can briefly 400 as task_not_exist,
+                # and the proxy occasionally 5xx's - both are worth waiting out.
+                if exc.status >= 500 or "task_not_exist" in exc.body:
+                    continue
+                raise
+            status = task.get("status")
+            if status == "SUCCEEDED":
+                return task
+            if status in ("FAILED", "CANCELLED"):
+                raise RuntimeError(f"CometAPI speech task {task_id} {status.lower()}: "
+                                   f"{task.get('failure') or task.get('failureCode') or 'no reason given'}")
+        raise TimeoutError(f"CometAPI speech task {task_id} didn't finish within {self.task_timeout:.0f}s")
+
+    def synthesize(self, text: str) -> bytes:
+        from lector.ffmpeg import audio_to_wav
+
+        submitted = self._transport.post_json("/runwayml/v1/text_to_speech", self.build_request(text))
+        if "id" not in submitted:
+            raise RuntimeError(f"CometAPI didn't accept the speech task: {submitted}")
+        task = self._wait_for(submitted["id"])
+        if not task.get("output"):
+            raise RuntimeError(f"CometAPI speech task {submitted['id']} succeeded with no output")
+        return audio_to_wav(self._transport.download(task["output"][0]), self.sample_rate)
+
+
+def build_comet_runner(model: str = "eleven_v3", voice: Optional[str] = None,
+                        reference_audio: Optional[str] = None, language: Optional[str] = None,
+                        config: Optional[SynthesisConfig] = None,
+                        api_key: Optional[str] = None) -> BaseTTSRunner:
+    """Any CometAPI speech model behind one constructor: OpenAI's models
+    through OpenAITTSRunner pointed at CometAPI (synchronous, no cloning),
+    everything else through CometTTSRunner."""
+    if model in COMET_OPENAI_MODELS:
+        if reference_audio is not None:
+            raise ValueError(f"{model} can't clone a voice - use model={COMET_CLONING_MODEL!r}")
+        return OpenAITTSRunner(voice=voice or "alloy", model=model, config=config,
+                               api_key=comet_api_key(api_key), base_url=f"{COMET_BASE_URL}/v1")
+    return CometTTSRunner(model=model, voice=voice, reference_audio=reference_audio,
+                          language=language, config=config, api_key=api_key)
+
+
+# ---------------------------------------------------------------------------
+# Chunk cache - wraps any backend.
+# ---------------------------------------------------------------------------
+
+class CachedTTSRunner(BaseTTSRunner):
+    """Keeps every synthesized chunk on disk, keyed by the text and
+    `namespace` (whatever identifies the voice: backend, model, voice,
+    reference file). A run that fails halfway, or a re-run after fixing
+    one line of the script, then only pays for chunks it hasn't already
+    got - which matters for hosted backends that bill per request."""
+
+    def __init__(self, inner: BaseTTSRunner, cache_dir: str, namespace: str):
+        from pathlib import Path
+
+        self.inner = inner
+        self.cache_dir = Path(cache_dir)
+        self.namespace = namespace
+        self.hits = 0
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def _path(self, text: str):
+        import hashlib
+
+        key = hashlib.sha256(f"{self.namespace}\0{text}".encode("utf-8")).hexdigest()
+        return self.cache_dir / f"{key}.wav"
+
+    def synthesize(self, text: str) -> bytes:
+        path = self._path(text)
+        if path.exists():
+            self.hits += 1
+            return path.read_bytes()
+        data = self.inner.synthesize(text)
+        partial = path.with_suffix(".partial")
+        partial.write_bytes(data)
+        partial.replace(path)  # atomic: a killed run never leaves a truncated chunk behind
+        return data
+
+    def close(self) -> None:
+        self.inner.close()

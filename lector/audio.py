@@ -16,6 +16,7 @@ from __future__ import annotations
 import io
 import re
 import wave
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import List
 
@@ -96,14 +97,25 @@ def _concatenate_wavs(wav_bytes_list: List[bytes], output_path: str) -> float:
 
 
 def synthesize_long_text(text: str, runner: BaseTTSRunner, output_path: str,
-                          max_chunk_chars: int = 1000) -> AudioResult:
+                          max_chunk_chars: int = 1000, max_workers: int = 1) -> AudioResult:
     """Synthesize arbitrary-length `text` to a single WAV file at
     `output_path`, chunking internally so no backend ever gets a single
-    oversized synthesis call."""
+    oversized synthesis call.
+
+    max_workers > 1 synthesizes that many chunks at once - worth it for
+    hosted backends, where each call is mostly waiting on the network
+    (lector.tts_runtime.CometTTSRunner takes about a minute per chunk).
+    Leave it at 1 for in-process models (Piper, Orpheus), which aren't
+    meant to be called from several threads. Chunk order in the output
+    is the text's order either way."""
     chunks = split_into_chunks(text, max_chunk_chars=max_chunk_chars)
     if not chunks:
         raise ValueError("Nothing to synthesize: text is empty after stripping/splitting.")
 
-    wav_bytes_list = [runner.synthesize(chunk) for chunk in chunks]
+    if max_workers > 1:
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            wav_bytes_list = list(pool.map(runner.synthesize, chunks))
+    else:
+        wav_bytes_list = [runner.synthesize(chunk) for chunk in chunks]
     duration = _concatenate_wavs(wav_bytes_list, output_path)
     return AudioResult(output_path=output_path, num_chunks=len(chunks), duration_seconds=duration)

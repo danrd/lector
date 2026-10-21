@@ -18,6 +18,7 @@ dependencies = [
 
 [project.scripts]
 lector = "lector.cli:main"
+lector-read = "lector.read_cli:main"
 
 [project.optional-dependencies]
 llama-cpp = [
@@ -36,6 +37,12 @@ tts-local = [
     "piper-tts",
 ]
 tts-cloud = [
+    "openai",
+]
+# CometAPI: speech (ElevenLabs presets, seed_audio voice cloning, OpenAI
+# TTS) plus the chat model lector-read uses for formulas. Also needs the
+# ffmpeg binary on PATH.
+comet = [
     "openai",
 ]
 tts-orpheus = [

@@ -7,6 +7,11 @@ rewrites the result for speech, and synthesizes audio. Output: a WAV
 file (optionally uploaded to YouTube with a static/slide image later -
 not built, see "Not built yet").
 
+A second, simpler mode - **`lector-read`** - reads an existing vault note
+(or chosen sections of it) aloud verbatim, with only formulas put into
+words; see "Reading a note aloud" below. That one has been run end to
+end against live models.
+
 Status: the topic -> audio content pipeline is complete end to end - see
 `lector/pipeline.py`. Built on [`llm_kit`](https://github.com/danrd/toolkit/blob/main/llm_kit/README.md)
 (a dependency, from the `toolkit` repo - see that file for what it
@@ -64,6 +69,23 @@ resumable task-processing loop).
   of vault notes. Soft failures (a prompt that doesn't fit its
   token_limit) are reported, not masked - the result says exactly which
   stage a run got to, with only the fields that stage reached populated.
+- **`lector/obsidian.py`** — note -> speakable lines for `lector-read`:
+  picks sections by heading (case/emoji-insensitive, subsections
+  included, the per-topic "🔗 Sources" link lists cut out), then strips
+  Obsidian syntax - wikilinks become their visible text, the `map`
+  navigation callout, code blocks and tables are skipped (and counted),
+  emphasis/tags/emoji go. Formulas and code spans are left untouched for
+  the next step.
+- **`lector/verbalize.py`** — the only model step of `lector-read`:
+  lines containing notation (LaTeX, code spans, Greek letters, arrows)
+  are sent, whole, to a model that turns just the notation into words -
+  with the grammatical agreement Russian needs ("для набора а один, а
+  два"). Lines without notation never reach the model. Every rewrite is
+  checked to have kept the line's ordinary words; ones that didn't are
+  reported as drifted rather than silently accepted.
+- **`lector/read_cli.py`** — the `lector-read` command (see below).
+- **`lector/ffmpeg.py`** — decoding hosted TTS output (mp3 at any rate)
+  into one WAV format, and encoding the final file.
 - **`lector/cli.py`** — the command-line entry point (`lector` or
   `python -m lector`): loads the vault, picks a TTS backend, runs the
   pipeline, and writes the WAV plus the narration script beside it. Pure
@@ -79,7 +101,8 @@ resumable task-processing loop).
   pipeline against them yet - see `tts_runtime.py`'s docstring.
 - **Voice cloning in practice.** `OrpheusRunner` supports it structurally
   (reference audio + transcript), but needs a real reference recording
-  to try.
+  to try. (Cloning through CometAPI's `seed_audio` - `lector-read
+  --voice-ref` - does work; this item is about the local Orpheus path.)
 - **YouTube packaging.** Video container + a static/slide image (e.g.
   with formulas) - explicitly a later, lower-priority step; the audio
   pipeline was always the near-term target.
@@ -91,9 +114,48 @@ resumable task-processing loop).
 
 ```bash
 uv sync --extra test
-cp .env.example .env   # fill in OPENROUTER_API_KEY / OPENAI_API_KEY / WANDB_API_KEY as needed
+cp .env.example .env   # fill in COMET_API_KEY / OPENROUTER_API_KEY / OPENAI_API_KEY / WANDB_API_KEY as needed
 uv run pytest
 ```
+
+## Reading a note aloud
+
+```bash
+uv sync --extra comet          # plus the ffmpeg binary on PATH
+export COMET_API_KEY=...       # see .env.example
+
+uv run lector-read Math/02_Probability --vault ~/KB --list-sections
+uv run lector-read Math/02_Probability --vault ~/KB --section "Теорема Байеса" --section MLE
+```
+
+Writes `02_Probability-Теорема_Байеса-MLE.mp3`, the exact script that
+was voiced (`.txt`) and `.formulas.md` - every line whose formulas a
+model put into words, original beside spoken form, drifted ones first.
+The note is read in its own language (detected per chunk); nothing but
+notation is reworded.
+
+To check the formulas before paying for audio: `--script-only`, review
+or edit the `.txt`, then `uv run lector-read --script that.txt`. Synthesized
+chunks are cached (`~/.cache/lector/tts`), so re-voicing an edited
+script only pays for the chunks that changed.
+
+Voices, all through CometAPI (`--tts comet`, the default):
+
+- `--model eleven_v3 --voice Bernard` (default) - ElevenLabs with one of
+  Runway's preset voices (`Maya`, `Mark`, `Rachel`, ... - see
+  `--voice` in the CometAPI Runway TTS docs). The most natural prosody.
+- `--voice-ref me.mp3` - clones the voice in a 15-30 s clean recording
+  (switches to `seed_audio`; no transcript needed). Its chunks are kept
+  short (~500 characters): seed_audio silently stops at about a minute
+  of speech per request.
+- `--model gpt-4o-mini-tts --voice onyx` - OpenAI's voices, fastest.
+
+`--formulas raw` skips the model entirely (only the `$`/`` ` `` markup is
+dropped); `--llm-model` picks the CometAPI chat model that reads
+formulas (default `claude-sonnet-4-6`). `lector-read --help` lists the
+rest.
+
+## Generating a lecture on a topic
 
 Generating a lecture needs the `openrouter` extra (the CLI generates
 through OpenRouter) and a TTS backend:
