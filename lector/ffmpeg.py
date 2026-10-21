@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import wave
 from pathlib import Path
+from typing import Dict, List, Optional
 
 DEFAULT_SAMPLE_RATE = 24000
 
@@ -49,14 +50,41 @@ def audio_to_wav(data: bytes, sample_rate: int = DEFAULT_SAMPLE_RATE) -> bytes:
     return buffer.getvalue()
 
 
-def encode_audio(wav_path: "str | Path", output_path: "str | Path") -> None:
+def _metadata_flags(metadata: Optional[Dict[str, str]]) -> List[str]:
+    flags: List[str] = []
+    for key, value in (metadata or {}).items():
+        flags += ["-metadata", f"{key}={value}"]
+    if metadata:
+        flags += ["-id3v2_version", "3"]  # ID3v2.3: what Android players read most reliably
+    return flags
+
+
+def encode_audio(wav_path: "str | Path", output_path: "str | Path",
+                 metadata: Optional[Dict[str, str]] = None) -> None:
     """Encode a WAV file into whatever format `output_path`'s extension
-    names (.mp3, .m4a, .ogg, ...), letting ffmpeg pick the codec."""
+    names (.mp3, .m4a, .ogg, ...), letting ffmpeg pick the codec.
+    `metadata` becomes tags (title, album, track, ...) - what audiobook
+    players use to show a folder as a book with chapters."""
     result = subprocess.run(
         [require_ffmpeg(), "-hide_banner", "-loglevel", "error", "-y", "-i", str(wav_path),
-         "-q:a", "2", str(output_path)],
+         "-q:a", "2", *_metadata_flags(metadata), str(output_path)],
         capture_output=True, check=False,
     )
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg could not encode {output_path}: "
                            f"{result.stderr.decode(errors='replace').strip()}")
+
+
+def retag_audio(source: "str | Path", target: "str | Path", metadata: Dict[str, str]) -> None:
+    """Copy `source` to `target` with new tags, without re-encoding - for a
+    section that only moved (new track number) or was renamed."""
+    target = Path(target)
+    partial = target.with_name(target.stem + ".partial" + target.suffix)
+    result = subprocess.run(
+        [require_ffmpeg(), "-hide_banner", "-loglevel", "error", "-y", "-i", str(source),
+         "-map_metadata", "-1", "-c", "copy", *_metadata_flags(metadata), str(partial)],
+        capture_output=True, check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg could not retag {source}: {result.stderr.decode(errors='replace').strip()}")
+    partial.replace(target)

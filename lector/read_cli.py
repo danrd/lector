@@ -54,31 +54,9 @@ DEFAULT_LLM_MODEL = "claude-sonnet-4-6"
 DEFAULT_CACHE_DIR = Path.home() / ".cache" / "lector" / "tts"
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="lector-read",
-        description="Read an Obsidian note (or chosen sections of it) aloud, verbatim.",
-    )
-    parser.add_argument("note", nargs="?", default=None,
-                        help="The note to read: a path, or a path relative to --vault.")
-    parser.add_argument("--vault", default=None, help="Vault root that NOTE is relative to.")
-    parser.add_argument("--section", action="append", default=[],
-                        help="Heading to read (with its subsections); repeatable. Case, emoji and "
-                             "punctuation don't matter, and a partial name matches every heading "
-                             "containing it. Omitted: the whole note.")
-    parser.add_argument("--keep-sources", action="store_true",
-                        help="Also read the per-topic link lists (" +
-                             ", ".join(DEFAULT_EXCLUDED_SECTIONS) + "), skipped by default.")
-    parser.add_argument("--list-sections", action="store_true",
-                        help="Print the note's headings and exit.")
-    parser.add_argument("--script", default=None,
-                        help="Voice this (possibly hand-edited) script .txt instead of a note.")
-    parser.add_argument("--output", default=None,
-                        help="Audio file to write; format by extension (.mp3, .m4a, .wav). "
-                             "Default: <note>[-<section>].mp3 in the current directory.")
-    parser.add_argument("--script-only", action="store_true",
-                        help="Prepare and write the script (and formula review) without synthesizing.")
-
+def add_voice_arguments(parser: argparse.ArgumentParser) -> None:
+    """Formula and synthesis options - shared with lector-sync, which voices
+    the same way, just many sections at a time."""
     parser.add_argument("--formulas", choices=[FORMULAS_LLM, FORMULAS_RAW], default=FORMULAS_LLM,
                         help="llm (default): a model reads formulas/notation into words; "
                              "raw: drop the $/` markup only, no model call.")
@@ -105,6 +83,34 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cache-dir", default=str(DEFAULT_CACHE_DIR),
                         help="Where synthesized chunks are cached, so re-runs only pay for changed text.")
     parser.add_argument("--no-cache", action="store_true", help="Don't read or write the chunk cache.")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="lector-read",
+        description="Read an Obsidian note (or chosen sections of it) aloud, verbatim.",
+    )
+    parser.add_argument("note", nargs="?", default=None,
+                        help="The note to read: a path, or a path relative to --vault.")
+    parser.add_argument("--vault", default=None, help="Vault root that NOTE is relative to.")
+    parser.add_argument("--section", action="append", default=[],
+                        help="Heading to read (with its subsections); repeatable. Case, emoji and "
+                             "punctuation don't matter, and a partial name matches every heading "
+                             "containing it. Omitted: the whole note.")
+    parser.add_argument("--keep-sources", action="store_true",
+                        help="Also read the per-topic link lists (" +
+                             ", ".join(DEFAULT_EXCLUDED_SECTIONS) + "), skipped by default.")
+    parser.add_argument("--list-sections", action="store_true",
+                        help="Print the note's headings and exit.")
+    parser.add_argument("--script", default=None,
+                        help="Voice this (possibly hand-edited) script .txt instead of a note.")
+    parser.add_argument("--output", default=None,
+                        help="Audio file to write; format by extension (.mp3, .m4a, .wav). "
+                             "Default: <note>[-<section>].mp3 in the current directory.")
+    parser.add_argument("--script-only", action="store_true",
+                        help="Prepare and write the script (and formula review) without synthesizing.")
+
+    add_voice_arguments(parser)
     return parser
 
 
@@ -113,6 +119,10 @@ def validate_args(args) -> None:
         raise SystemExit("Give exactly one of NOTE or --script.")
     if args.script and (args.section or args.list_sections or args.script_only):
         raise SystemExit("--section/--list-sections/--script-only apply to a note, not to --script.")
+    validate_voice_args(args)
+
+
+def validate_voice_args(args) -> None:
     if args.voice_ref:
         if args.tts != COMET:
             raise SystemExit("--voice-ref (voice cloning) needs --tts comet.")

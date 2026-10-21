@@ -19,6 +19,7 @@ dependencies = [
 [project.scripts]
 lector = "lector.cli:main"
 lector-read = "lector.read_cli:main"
+lector-sync = "lector.sync_cli:main"
 
 [project.optional-dependencies]
 llama-cpp = [

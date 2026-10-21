@@ -84,6 +84,9 @@ resumable task-processing loop).
   checked to have kept the line's ordinary words; ones that didn't are
   reported as drifted rather than silently accepted.
 - **`lector/read_cli.py`** — the `lector-read` command (see below).
+- **`lector/sync.py`**, **`lector/sync_cli.py`** — `lector-sync`: the
+  whole vault (or chosen folders) as an incrementally updated folder of
+  per-section tracks (see below).
 - **`lector/ffmpeg.py`** — decoding hosted TTS output (mp3 at any rate)
   into one WAV format, and encoding the final file.
 - **`lector/cli.py`** — the command-line entry point (`lector` or
@@ -154,6 +157,35 @@ Voices, all through CometAPI (`--tts comet`, the default):
 dropped); `--llm-model` picks the CometAPI chat model that reads
 formulas (default `claude-sonnet-4-6`). `lector-read --help` lists the
 rest.
+
+## Keeping an audio mirror of the vault
+
+```bash
+uv run lector-sync --vault ~/KB --out ~/KB-audio --folder Math --folder AI --dry-run   # what, and how much
+uv run lector-sync --vault ~/KB --out ~/KB-audio --folder Math --folder AI
+```
+
+One folder per note, one mp3 per `##`/`###` section, tagged
+(album = note, track = position, title = heading) so an audiobook
+player on the phone shows a note as a book with chapters:
+
+```
+KB-audio/Math/02_Probability — Теория вероятностей/01 Аксиоматика Колмогорова, сигма-алгебра.mp3
+```
+
+Re-runs are incremental: a manifest in the output folder keeps each
+section's content hash, so only new or edited sections are voiced again;
+a section that merely moved is renamed and retagged without
+re-encoding, and audio of deleted sections and notes is removed. The
+voicing options are lector-read's (`--tts`, `--voice`, `--voice-ref`,
+`--formulas`, ...); changing the voice re-voices everything. Each run
+that voiced something appends the formula readings to
+`review-<date>.md` in the output folder. `_Meta`, `_Inbox` and other
+non-content folders are skipped.
+
+Sections are voiced one after another; through CometAPI that's about a
+minute per section whatever its size, so a first full pass of the
+vault's core (~400 sections) is a job for a local GPU engine or a night.
 
 ## Generating a lecture on a topic
 
